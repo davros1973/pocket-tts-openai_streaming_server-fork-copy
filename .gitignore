@@ -195,3 +195,9 @@ Dockerfile.xarta
 logs/*.log
 hf_cache/
 outputs/
+
+# Private user-uploaded voices (never committed)
+voices_user/
+
+# Server-side persistent data (contains voice metadata)
+data/
