@@ -372,6 +372,204 @@ def delete_user_voice(filename):
     return jsonify({'deleted': True, 'id': filename})
 
 
+@api.route('/v1/voices/user/<path:filename>/audio', methods=['GET'])
+def stream_user_voice_audio(filename):
+    """Stream a user voice file inline for browser audio playback."""
+    from pathlib import Path
+    from werkzeug.utils import secure_filename
+
+    tts = get_tts_service()
+    if not tts.voices_user_dir:
+        return jsonify({'error': 'User voices directory not configured'}), 503
+
+    safe = secure_filename(filename)
+    target = Path(tts.voices_user_dir) / safe
+    if not target.exists():
+        return jsonify({'error': f'{filename} not found'}), 404
+
+    mime_map = {'.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.flac': 'audio/flac',
+                '.ogg': 'audio/ogg', '.m4a': 'audio/mp4'}
+    mimetype = mime_map.get(target.suffix.lower(), 'audio/wav')
+    return send_file(str(target), mimetype=mimetype, as_attachment=False)
+
+
+@api.route('/v1/voices/user/<path:filename>/original-audio', methods=['GET'])
+def stream_user_voice_original_audio(filename):
+    """Stream the .pre-lavasr.bak backup for a user voice file inline."""
+    from pathlib import Path
+    from werkzeug.utils import secure_filename
+
+    tts = get_tts_service()
+    if not tts.voices_user_dir:
+        return jsonify({'error': 'User voices directory not configured'}), 503
+
+    safe = secure_filename(filename)
+    target = Path(tts.voices_user_dir) / safe
+    bak = target.with_suffix(target.suffix + '.pre-lavasr.bak')
+    if not bak.exists():
+        return jsonify({'error': f'No backup found for {filename}'}), 404
+
+    return send_file(str(bak), mimetype='audio/wav', as_attachment=False)
+
+
+@api.route('/v1/voices/user/<path:filename>/analyse', methods=['GET'])
+def analyse_user_voice(filename):
+    """Analyse audio characteristics of a user voice file.
+
+    Returns sample rate, duration, and spectral bandwidth metrics that help
+    determine whether BWE or denoising pre-processing might be beneficial
+    before using the file for voice cloning.
+    """
+    import torchaudio
+    import torch
+    from pathlib import Path
+    from werkzeug.utils import secure_filename
+
+    tts = get_tts_service()
+    if not tts.voices_user_dir:
+        return jsonify({'error': 'User voices directory not configured'}), 503
+
+    safe = secure_filename(filename)
+    target = Path(tts.voices_user_dir) / safe
+    if not target.exists():
+        return jsonify({'error': f'{filename} not found'}), 404
+
+    try:
+        waveform, sr = torchaudio.load(str(target))
+        channels, n_samples = waveform.shape
+        duration_s = n_samples / sr
+        nyquist_hz = sr / 2
+
+        # Mix to mono for spectral analysis
+        mono = waveform.mean(0)
+        n = len(mono)
+
+        # FFT-based bandwidth estimation
+        fft_mag = torch.fft.rfft(mono).abs()
+        freqs = torch.fft.rfftfreq(n, 1.0 / sr)
+        energy = fft_mag.pow(2)
+        total_energy = energy.sum()
+
+        # Spectral rolloff: frequency below which 95% of energy lies
+        if total_energy > 0:
+            cum_energy = energy.cumsum(0)
+            rolloff_indices = (cum_energy >= 0.95 * total_energy).nonzero()
+            rolloff_hz = float(freqs[rolloff_indices[0].item()]) if len(rolloff_indices) > 0 else float(nyquist_hz)
+        else:
+            rolloff_hz = float(nyquist_hz)
+
+        # High-frequency void check: if energy above 80% of Nyquist is near zero,
+        # the file was likely recorded at a lower rate and upsampled (no real HF content).
+        hf_mask = freqs > (nyquist_hz * 0.8)
+        hf_energy = energy[hf_mask].sum()
+        hf_ratio = float(hf_energy / total_energy) if total_energy > 0 else 0.0
+
+        # BWE is likely helpful when effective bandwidth < 8 kHz or HF content is absent
+        bwe_recommended = (rolloff_hz < 8000) or (sr <= 16000) or (hf_ratio < 0.01)
+
+        from app.services.enhancer import get_enhancer_service
+        lavasr_available = get_enhancer_service().is_loaded or True  # available if installed
+
+        bak = target.with_suffix(target.suffix + '.pre-lavasr.bak')
+        has_backup = bak.exists()
+
+        logger.info(f'Voice analyse: {filename} sr={sr} duration={duration_s:.2f}s rolloff={rolloff_hz:.0f}Hz hf_ratio={hf_ratio:.4f}')
+        return jsonify({
+            'filename': filename,
+            'sample_rate': sr,
+            'channels': channels,
+            'duration_s': round(duration_s, 2),
+            'nyquist_hz': int(nyquist_hz),
+            'effective_bandwidth_hz': round(rolloff_hz),
+            'high_freq_energy_ratio': round(hf_ratio, 4),
+            'bwe_recommended': bwe_recommended,
+            'lavasr_available': lavasr_available,
+            'has_backup': has_backup,
+            'backup_filename': bak.name if has_backup else None,
+        })
+    except Exception as exc:
+        logger.error(f'Voice analysis failed for {filename}: {exc}')
+        return jsonify({'error': f'Analysis failed: {exc}'}), 500
+
+
+@api.route('/v1/voices/user/<path:filename>/preprocess', methods=['POST'])
+def preprocess_user_voice(filename):
+    """Apply BWE and/or denoising (LavaSR) to a user voice file before cloning.
+
+    Overwrites the file in-place (saved as WAV with same stem).
+    A backup is saved alongside as <stem>.pre-lavasr.bak on first preprocess.
+
+    Request body (JSON): { "bwe": bool, "denoise": bool }
+    """
+    import shutil
+    import torchaudio
+    from pathlib import Path
+    from werkzeug.utils import secure_filename
+
+    tts = get_tts_service()
+    if not tts.voices_user_dir:
+        return jsonify({'error': 'User voices directory not configured'}), 503
+
+    safe = secure_filename(filename)
+    target = Path(tts.voices_user_dir) / safe
+    if not target.exists():
+        return jsonify({'error': f'{filename} not found'}), 404
+
+    body = request.get_json(silent=True) or {}
+    do_bwe = bool(body.get('bwe', False))
+    do_denoise = bool(body.get('denoise', False))
+    if not do_bwe and not do_denoise:
+        return jsonify({'error': 'No operations requested — set bwe and/or denoise to true'}), 400
+
+    from app.services.enhancer import get_enhancer_service
+    enhancer = get_enhancer_service()
+
+    try:
+        waveform, sr = torchaudio.load(str(target))
+
+        # LavaSR processes mono; mix down stereo/multichannel before passing in
+        if waveform.shape[0] > 1:
+            waveform = waveform.mean(0, keepdim=True)
+
+        enhanced, out_sr = enhancer.enhance(
+            waveform, input_sr=sr, do_enhance=do_bwe, do_denoise=do_denoise
+        )
+
+        # Backup original (only once — don't overwrite an existing backup)
+        bak = target.with_suffix(target.suffix + '.pre-lavasr.bak')
+        if not bak.exists():
+            shutil.copy2(str(target), str(bak))
+            logger.info(f'Voice backup saved: {bak.name}')
+
+        # Save output as WAV with same stem (always WAV for clean playback/cloning)
+        out_path = target.with_suffix('.wav')
+        torchaudio.save(str(out_path), enhanced, out_sr)
+
+        # Invalidate in-memory voice cache and safetensors cache
+        for path in (target, out_path):
+            tts.voice_cache.pop(str(path.resolve()), None)
+        if tts.voices_cache_dir:
+            cache_file = Path(tts.voices_cache_dir) / f'{target.stem}.safetensors'
+            if cache_file.exists():
+                cache_file.unlink()
+                logger.info(f'Invalidated safetensors cache: {cache_file.name}')
+
+        logger.info(f'Voice preprocessed: {filename} → {out_path.name} bwe={do_bwe} denoise={do_denoise} {sr}Hz→{out_sr}Hz')
+        return jsonify({
+            'original_filename': filename,
+            'output_filename': out_path.name,
+            'original_sample_rate': sr,
+            'output_sample_rate': out_sr,
+            'bwe_applied': do_bwe,
+            'denoise_applied': do_denoise,
+            'size_bytes': out_path.stat().st_size,
+            'backup': bak.name,
+        })
+    except Exception as exc:
+        logger.error(f'Voice preprocess failed for {filename}: {exc}')
+        return jsonify({'error': f'Preprocessing failed: {exc}'}), 500
+
+
 # ══════════════════════════════════════════════════════════════════
 # Test Texts — server-side persistence for labelled TTS test snippets
 # ══════════════════════════════════════════════════════════════════

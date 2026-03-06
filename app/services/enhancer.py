@@ -120,9 +120,12 @@ class EnhancerService:
         """
         self.ensure_loaded()
 
-        # Normalise to 1-D float32 on CPU
-        wav = audio.squeeze(0) if audio.dim() == 2 else audio
-        wav = wav.float().cpu()
+        # Normalise to 1-D float32 on CPU.
+        # Mix down stereo/multichannel to mono — LavaSR processes single-channel audio.
+        if audio.dim() == 2 and audio.shape[0] > 1:
+            wav = audio.float().cpu().mean(0)
+        else:
+            wav = audio.squeeze(0).float().cpu()
 
         # LavaSR was designed for 16 kHz speech; resample down first.
         # Note: going 24 kHz → 16 kHz discards some content above 8 kHz,

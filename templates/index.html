@@ -493,6 +493,21 @@ with client.audio.speech.with_streaming_response.create(
         <input type="file" id="clone-file-input" accept=".wav,.mp3,.flac" style="display:none" onchange="uploadVoiceFile(this.files[0])">
       </div>
       <div id="clone-upload-status" style="display:none;margin-top:10px;font-size:13px;padding:10px;border-radius:6px;background:var(--surface2)"></div>
+      <div id="clone-analyse-panel" style="display:none;margin-top:10px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:12px;color:var(--text-dim);font-weight:600">VOICE ANALYSIS</span><span class="badge grey" title="BWE and denoising use LavaSR (a model trained on noisy recordings). Results on clean audio or MP3s may add artifacts. Listen before using.">⚠ Experimental</span></div>
+        <div id="clone-analyse-badges" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
+        <div id="clone-playback-row" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+          <button class="btn small secondary" onclick="toggleClonePreview('current')" title="Play current voice file">▶ Current</button>
+          <button class="btn small secondary" id="clone-play-original-btn" style="display:none" onclick="toggleClonePreview('original')" title="Play original (pre-LavaSR) backup">▶ Original</button>
+          <audio id="clone-preview-audio" controls style="flex:1;height:32px;min-width:180px;display:none"></audio>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:10px 12px;border-radius:6px;background:var(--surface2);font-size:13px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="clone-preprocess-bwe"> Apply BWE (bandwidth extension)</label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="clone-preprocess-denoise"> Denoise</label>
+          <button class="btn primary small" onclick="preprocessVoice()">Preprocess Voice</button>
+          <span id="clone-preprocess-status" style="color:var(--text-dim)"></span>
+        </div>
+      </div>
     </div>
 
     <!-- Your uploaded voices — full width -->
@@ -2178,6 +2193,9 @@ async function uploadVoiceFile(file) {
     }
     loadVoices();
     loadUserVoicesList();
+    // Auto-analyse uploaded voice — show bandwidth info and preprocess options
+    const _mid = statusEl.textContent.match(/(?:Uploaded|Updated): (\S+) \(/);
+    if (_mid?.[1]) { document.getElementById('clone-analyse-panel').style.display = 'none'; analyseVoice(_mid[1]); }
   } catch (e) {
     statusEl.style.color = 'var(--red)';
     statusEl.textContent = `Error: ${e.message}`;
@@ -2215,8 +2233,11 @@ function renderUserVoicesList(voices) {
       <div style="display:flex;gap:4px;flex-wrap:wrap">${tagPills}</div>
       <div class="usize">${sizeFmt}</div>
       ${vm.hidden ? '<span class="badge grey" style="font-size:10px">hidden</span>' : ''}
+      <button class="btn small secondary" onclick="analyseVoice('${escAttr(v.id)}');document.getElementById('clone-analyse-panel').scrollIntoView({behavior:'smooth',block:'nearest'})" title="Analyse bandwidth + preprocess options">⚙ Analyse</button>
+      <button class="btn small secondary" onclick="toggleVoicePlayback('${escAttr(v.id)}')" title="Preview voice file">▶</button>
       <button class="btn small danger" onclick="confirmDeleteUserVoice('${escAttr(v.id)}')" title="Delete permanently">🗑</button>
-    </div>`;
+    </div>
+    <div id="vaudio-${escAttr(v.id)}" style="display:none;padding:4px 12px 8px;border-radius:0 0 6px 6px;margin:-2px 0 2px"><audio controls style="width:100%;height:32px"></audio></div>`;
   }).join('');
 }
 
@@ -2874,6 +2895,110 @@ async function loadEnhancerModel() {
     if (status) status.textContent = `Error: ${e.message}`;
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Load LavaSR Model Now'; }
+  }
+}
+
+
+async function analyseVoice(voiceId, opts) {
+  opts = opts || {};
+  window._currentCloneVoiceId = voiceId;
+  const panel = document.getElementById('clone-analyse-panel');
+  const badges = document.getElementById('clone-analyse-badges');
+  panel.style.display = 'block';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  badges.innerHTML = '<span style="color:var(--text-dim);font-size:12px">Analysing…</span>';
+  document.getElementById('clone-preprocess-status').textContent = '';
+  try {
+    const r = await fetch(`${API}/v1/voices/user/${encodeURIComponent(voiceId)}/analyse`);
+    const d = await r.json();
+    if (!r.ok) { badges.innerHTML = `<span style="color:var(--red)">Analysis failed: ${d.error}</span>`; return; }
+    const srBadge = d.sample_rate >= 44100 ? 'green' : d.sample_rate >= 22050 ? 'yellow' : 'red';
+    const bwBadge = d.bwe_recommended ? 'yellow' : 'green';
+    badges.innerHTML = `<span class="badge ${srBadge}" title="File sample rate">${(d.sample_rate/1000).toFixed(1)} kHz</span>` +
+      `<span class="badge ${bwBadge}" title="Spectral rolloff — frequency below which 95% of energy lies">${(d.effective_bandwidth_hz/1000).toFixed(1)} kHz bandwidth</span>` +
+      `<span style="font-size:12px;color:var(--text-dim)">${d.duration_s}s · ${d.channels}ch</span>` +
+      (d.bwe_recommended ? '<span class="badge yellow">BWE recommended</span>' : '<span class="badge green">Full bandwidth</span>');
+    const bweCheck = document.getElementById('clone-preprocess-bwe');
+    const denoiseCheck = document.getElementById('clone-preprocess-denoise');
+    if (!opts.skipCheckboxAutoFill) {
+      if (bweCheck) bweCheck.checked = d.bwe_recommended;
+      if (denoiseCheck) denoiseCheck.checked = false;
+    }
+    const origBtn = document.getElementById('clone-play-original-btn');
+    if (origBtn) origBtn.style.display = d.has_backup ? 'inline-flex' : 'none';
+    const prevAudio = document.getElementById('clone-preview-audio');
+    if (prevAudio) { prevAudio.pause(); prevAudio.src = ''; prevAudio.style.display = 'none'; }
+  } catch (e) {
+    badges.innerHTML = `<span style="color:var(--red)">Analysis error: ${e.message}</span>`;
+  }
+}
+
+async function preprocessVoice() {
+  const voiceId = window._currentCloneVoiceId;
+  if (!voiceId) return;
+  const bwe = document.getElementById('clone-preprocess-bwe')?.checked || false;
+  const denoise = document.getElementById('clone-preprocess-denoise')?.checked || false;
+  const statusEl = document.getElementById('clone-preprocess-status');
+  if (!bwe && !denoise) { statusEl.textContent = 'Select at least one option.'; return; }
+  const btn = document.querySelector('#clone-analyse-panel .btn.primary');
+  statusEl.style.color = 'var(--text-dim)';
+  statusEl.textContent = 'Processing…';
+  if (btn) { btn.disabled = true; btn.textContent = 'Processing…'; }
+  try {
+    const r = await fetch(`${API}/v1/voices/user/${encodeURIComponent(voiceId)}/preprocess`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ bwe, denoise }),
+    });
+    const d = await r.json();
+    if (!r.ok) { statusEl.style.color = 'var(--red)'; statusEl.textContent = `Error: ${d.error}`; return; }
+    statusEl.style.color = 'var(--green)';
+    statusEl.textContent = `✓ Saved as ${d.output_filename} (${d.original_sample_rate} Hz → ${d.output_sample_rate} Hz, backup: ${d.backup})`;
+    window._currentCloneVoiceId = d.output_filename;
+    loadVoices();
+    loadUserVoicesList();
+    setTimeout(() => analyseVoice(d.output_filename, { skipCheckboxAutoFill: true }), 500);
+  } catch (e) {
+    statusEl.style.color = 'var(--red)'; statusEl.textContent = `Error: ${e.message}`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Preprocess Voice'; }
+  }
+}
+
+
+function toggleVoicePlayback(voiceId) {
+  const el = document.getElementById('vaudio-' + voiceId);
+  if (!el) return;
+  const audio = el.querySelector('audio');
+  if (el.style.display === 'none') {
+    if (!audio.src || audio.src.endsWith('#')) audio.src = `${API}/v1/voices/user/${encodeURIComponent(voiceId)}/audio`;
+    el.style.display = 'block';
+    audio.play();
+  } else {
+    audio.pause();
+    el.style.display = 'none';
+  }
+}
+
+function toggleClonePreview(which) {
+  const voiceId = window._currentCloneVoiceId;
+  if (!voiceId) return;
+  const audio = document.getElementById('clone-preview-audio');
+  if (!audio) return;
+  const url = which === 'original'
+    ? `${API}/v1/voices/user/${encodeURIComponent(voiceId)}/original-audio`
+    : `${API}/v1/voices/user/${encodeURIComponent(voiceId)}/audio`;
+  if (audio.style.display === 'none') {
+    audio.style.display = 'block';
+    audio.src = url;
+    audio.play();
+  } else if (audio.src !== url && !audio.src.endsWith(url)) {
+    // Switched between current and original — swap source
+    audio.pause();
+    audio.src = url;
+    audio.play();
+  } else {
+    audio.pause();
+    audio.style.display = 'none';
   }
 }
 
