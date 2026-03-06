@@ -538,7 +538,7 @@ with client.audio.speech.with_streaming_response.create(
     <div class="grid2">
       <div class="form-row">
         <label>Voice</label>
-        <select id="rt-voice"></select>
+        <select id="rt-voice" onchange="renderRtVoiceTags()"></select>
       </div>
       <div class="form-row" style="align-self:end">
         <div class="flex-gap">
@@ -548,6 +548,7 @@ with client.audio.speech.with_streaming_response.create(
         </div>
       </div>
     </div>
+    <div id="rt-tag-strip" style="display:none; margin: 4px 0 10px"></div>
     <div class="stream-log" id="rt-log">
       <div class="log-line info">Ready. Press Start Real-time to begin.</div>
     </div>
@@ -918,6 +919,48 @@ function populateVoiceSelects(voices) {
     el.value = target;
     if (!el.value) el.value = builtin[0]?.id || 'alba';
   });
+  renderRtVoiceTags();
+}
+
+function renderRtVoiceTags() {
+  const strip = document.getElementById('rt-tag-strip');
+  if (!strip) return;
+  const voiceId = document.getElementById('rt-voice')?.value;
+  if (!voiceId) { strip.style.display = 'none'; return; }
+  strip.style.display = '';
+
+  const vm = allVoiceMeta.voices?.[voiceId] || {};
+  const vTags = (vm.tags || []).map(tid => allVoiceMeta.tags?.[tid]).filter(Boolean);
+  const tagPills = vTags.map(t =>
+    `<span class="voice-tag-pill" style="background:${escAttr(t.color)}">${escHtml(t.name)}</span>`
+  ).join('');
+
+  const allTagEntries = Object.entries(allVoiceMeta.tags || {});
+  const tagChecks = allTagEntries.length === 0
+    ? `<div style="color:var(--text-dim);font-size:12px">No tags yet — create some on the Tags tab.</div>`
+    : allTagEntries.map(([tid, tdata]) => {
+        const checked = (vm.tags || []).includes(tid);
+        return `<label class="tag-check-row">
+          <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleVoiceTag('${escAttr(voiceId)}','${escAttr(tid)}')">
+          <span class="tag-dot" style="background:${escAttr(tdata.color)}"></span>
+          <span>${escHtml(tdata.name)}</span>
+        </label>`;
+      }).join('');
+
+  strip.innerHTML = `
+    <div class="voice-card-tags">${tagPills}
+      <button class="btn small secondary" style="padding:1px 7px;font-size:10px;border-radius:50px"
+        onclick="const p=document.getElementById('rt-tag-editor');p.style.display=p.style.display==='none'?'block':'none'"
+        title="Manage tags for this voice">⊕ tag</button>
+    </div>
+    <div class="tag-editor-panel" id="rt-tag-editor" style="display:none">
+      ${tagChecks}
+      <div class="tag-editor-new">
+        <input type="text" placeholder="New tag name…" id="rt-teinput" style="font-size:12px"
+          onkeydown="if(event.key==='Enter')quickCreateTag('${escAttr(voiceId)}',this.value)">
+        <button class="btn small" onclick="quickCreateTag('${escAttr(voiceId)}',document.getElementById('rt-teinput').value)">＋</button>
+      </div>
+    </div>`;
 }
 
 async function testVoice(voiceId, voiceName) {
@@ -1409,11 +1452,16 @@ async function toggleVoiceTag(voiceId, tagId) {
     if (!allVoiceMeta.voices[voiceId]) allVoiceMeta.voices[voiceId] = {};
     allVoiceMeta.voices[voiceId].tags = updated.tags;
     filterVoices();
-    populateVoiceSelects(allVoices);
-    // Re-open the tag editor after re-render
+    populateVoiceSelects(allVoices);  // also calls renderRtVoiceTags()
+    // Re-open the tag editors after re-render
     setTimeout(() => {
       const panel = document.getElementById(`te-${voiceId}`);
       if (panel) panel.style.display = 'block';
+      // Keep RT tag editor open if this voice is currently selected in rt-voice
+      if (document.getElementById('rt-voice')?.value === voiceId) {
+        const rtp = document.getElementById('rt-tag-editor');
+        if (rtp) rtp.style.display = 'block';
+      }
     }, 30);
   } catch (e) { console.error('toggleVoiceTag:', e); }
 }
