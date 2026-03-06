@@ -238,16 +238,7 @@ with client.audio.speech.with_streaming_response.create(
       <div class="card-title">Default Voice</div>
       <div class="form-row">
         <label>Voice (used in test page defaults)</label>
-        <select id="cfg-voice">
-          <option value="alba">alba (builtin)</option>
-          <option value="marius">marius (builtin)</option>
-          <option value="javert">javert (builtin)</option>
-          <option value="jean">jean (builtin)</option>
-          <option value="fantine">fantine (builtin)</option>
-          <option value="cosette">cosette (builtin)</option>
-          <option value="eponine">eponine (builtin)</option>
-          <option value="azelma">azelma (builtin)</option>
-        </select>
+        <select id="cfg-voice"></select>
       </div>
       <div class="form-row">
         <label>Default Format</label>
@@ -346,16 +337,7 @@ with client.audio.speech.with_streaming_response.create(
     <div class="grid2">
       <div class="form-row">
         <label>Voice</label>
-        <select id="batch-voice">
-          <option value="alba">alba</option>
-          <option value="marius">marius</option>
-          <option value="javert">javert</option>
-          <option value="jean">jean</option>
-          <option value="fantine">fantine</option>
-          <option value="cosette">cosette</option>
-          <option value="eponine">eponine</option>
-          <option value="azelma">azelma</option>
-        </select>
+        <select id="batch-voice"></select>
       </div>
       <div class="form-row">
         <label>Format</label>
@@ -401,16 +383,7 @@ with client.audio.speech.with_streaming_response.create(
     <div class="grid2">
       <div class="form-row">
         <label>Voice</label>
-        <select id="rt-voice">
-          <option value="alba">alba</option>
-          <option value="marius">marius</option>
-          <option value="javert">javert</option>
-          <option value="jean">jean</option>
-          <option value="fantine">fantine</option>
-          <option value="cosette">cosette</option>
-          <option value="eponine">eponine</option>
-          <option value="azelma">azelma</option>
-        </select>
+        <select id="rt-voice"></select>
       </div>
       <div class="form-row" style="align-self:end">
         <div class="flex-gap">
@@ -435,16 +408,7 @@ with client.audio.speech.with_streaming_response.create(
     <div class="grid2">
       <div class="form-row">
         <label>Voice</label>
-        <select id="stream-voice">
-          <option value="alba">alba</option>
-          <option value="marius">marius</option>
-          <option value="javert">javert</option>
-          <option value="jean">jean</option>
-          <option value="fantine">fantine</option>
-          <option value="cosette">cosette</option>
-          <option value="eponine">eponine</option>
-          <option value="azelma">azelma</option>
-        </select>
+        <select id="stream-voice"></select>
       </div>
       <div class="form-row" style="align-self:end">
         <div class="flex-gap">
@@ -520,17 +484,13 @@ async function init() {
     const saved = localStorage.getItem('pockettts-openai-config');
     if (saved) {
       userConfig = { ...userConfig, ...JSON.parse(saved) };
-      document.getElementById('cfg-voice').value = userConfig.voice;
       document.getElementById('cfg-format').value = userConfig.format || 'wav';
-      ['batch-voice','rt-voice','stream-voice'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.value = userConfig.voice;
-      });
     }
   } catch (_) {}
 
   await checkHealth();
   setInterval(checkHealth, 30000);
+  loadVoices();  // populates Voices tab grid + all voice selects + counts
   loadVoiceCount();
 }
 
@@ -649,6 +609,7 @@ async function loadVoices() {
     document.getElementById('custom-count-badge').textContent = `${custom.length} custom`;
 
     renderVoices(allVoices);
+    populateVoiceSelects(allVoices);
   } catch (e) {
     grid.innerHTML = `<div style="color:var(--red); font-size:13px; grid-column:1/-1">Error loading voices: ${e.message}</div>`;
   }
@@ -677,6 +638,25 @@ function filterVoices() {
   const q = document.getElementById('voice-search').value.toLowerCase().trim();
   const filtered = q ? allVoices.filter(v => v.name.toLowerCase().includes(q) || v.id.toLowerCase().includes(q)) : allVoices;
   renderVoices(filtered);
+}
+
+function populateVoiceSelects(voices) {
+  const builtin = voices.filter(v => v.type === 'builtin');
+  const custom  = voices.filter(v => v.type !== 'builtin');
+  function buildOptions(list) {
+    return list.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+  }
+  const html = `<optgroup label="Built-in (${builtin.length})">${buildOptions(builtin)}</optgroup>`
+             + (custom.length ? `<optgroup label="Community (${custom.length})">${buildOptions(custom)}</optgroup>` : '');
+  ['cfg-voice', 'batch-voice', 'rt-voice', 'stream-voice'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const prev = el.value;
+    el.innerHTML = html;
+    const target = prev || userConfig.voice || 'alba';
+    el.value = target;
+    if (!el.value) el.value = builtin[0]?.id || 'alba';
+  });
 }
 
 async function testVoice(voiceId, voiceName) {
