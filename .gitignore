@@ -185,3 +185,13 @@ cython_debug/
 .cursorindexingignore
 
 .DS_Store
+
+# xarta infra — never committed
+.xarta/
+Dockerfile.xarta
+.env
+
+# Runtime artefacts
+logs/*.log
+hf_cache/
+outputs/
