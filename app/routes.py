@@ -482,6 +482,84 @@ def monitor_events_clear():
     return jsonify({'cleared': True})
 
 
+# ══════════════════════════════════════════════════════════════════
+# LavaSR Audio Enhancement — runtime control
+# LavaSR — Apache License 2.0, Copyright (c) 2024 Yatharth Sharma
+# MIT (this codebase) + Apache 2.0 (LavaSR) are fully compatible.
+# See LICENSES/LICENSE-LAVASR for the full Apache 2.0 text.
+# ══════════════════════════════════════════════════════════════════
+
+@api.route('/v1/enhancer/status', methods=['GET'])
+def enhancer_status():
+    """Return LavaSR availability, load state, and current configuration."""
+    from flask import current_app
+    from app.config import Config
+    from app.services.enhancer import get_enhancer_service
+    svc = get_enhancer_service()
+    return jsonify({
+        'available': True,
+        'enabled': current_app.config.get('LAVASR_ENABLED', False),
+        'model_loaded': svc.is_loaded,
+        'enhance_default': current_app.config.get('LAVASR_ENHANCE', True),
+        'denoise_default': current_app.config.get('LAVASR_DENOISE', False),
+        'model_id': Config.LAVASR_MODEL,
+        'device': Config.LAVASR_DEVICE,
+        'output_sr': 48000,
+    })
+
+
+@api.route('/v1/enhancer/config', methods=['GET'])
+def get_enhancer_config():
+    """Return current runtime enhancer configuration."""
+    from flask import current_app
+    return jsonify({
+        'enabled': current_app.config.get('LAVASR_ENABLED', False),
+        'enhance': current_app.config.get('LAVASR_ENHANCE', True),
+        'denoise': current_app.config.get('LAVASR_DENOISE', False),
+    })
+
+
+@api.route('/v1/enhancer/config', methods=['POST'])
+def set_enhancer_config():
+    """Update runtime enhancer settings.  Changes take effect immediately but
+    reset to env-var defaults on container restart."""
+    from flask import current_app
+    data = request.json or {}
+    changed = {}
+    if 'enabled' in data:
+        current_app.config['LAVASR_ENABLED'] = bool(data['enabled'])
+        changed['enabled'] = current_app.config['LAVASR_ENABLED']
+    if 'enhance' in data:
+        current_app.config['LAVASR_ENHANCE'] = bool(data['enhance'])
+        changed['enhance'] = current_app.config['LAVASR_ENHANCE']
+    if 'denoise' in data:
+        current_app.config['LAVASR_DENOISE'] = bool(data['denoise'])
+        changed['denoise'] = current_app.config['LAVASR_DENOISE']
+    return jsonify({
+        'updated': changed,
+        'config': {
+            'enabled': current_app.config.get('LAVASR_ENABLED', False),
+            'enhance': current_app.config.get('LAVASR_ENHANCE', True),
+            'denoise': current_app.config.get('LAVASR_DENOISE', False),
+        },
+    })
+
+
+@api.route('/v1/enhancer/load', methods=['POST'])
+def load_enhancer_model():
+    """Pre-load the LavaSR model (otherwise it loads lazily on first enhanced request).
+    Useful for warming up on startup rather than incurring latency on the first call."""
+    from app.services.enhancer import get_enhancer_service
+    svc = get_enhancer_service()
+    if svc.is_loaded:
+        return jsonify({'status': 'already_loaded'})
+    try:
+        svc.load_model()
+        return jsonify({'status': 'loaded'})
+    except Exception as exc:
+        return jsonify({'status': 'error', 'error': str(exc)}), 500
+
+
 @api.route('/v1/audio/speech', methods=['POST'])
 def generate_speech():
     """
@@ -548,9 +626,34 @@ def generate_speech():
             # logger.info(f'Preprocessing text: {text}')
             text = text_preprocessor.process(text)
             # logger.info(f'Preprocessed text: {text}')
+
+        # ── LavaSR audio enhancement ─────────────────────────────────────
+        # Per-request 'enhance'/'denoise' override server defaults.
+        # Pass null/omit to use whatever the server default is.
+        lavasr_enabled = current_app.config.get('LAVASR_ENABLED', False)
+        _enhance_req = data.get('enhance')   # None | True | False
+        _denoise_req = data.get('denoise')   # None | True | False
+        do_enhance = (
+            bool(_enhance_req) if _enhance_req is not None
+            else current_app.config.get('LAVASR_ENHANCE', True)
+        ) and lavasr_enabled
+        do_denoise = (
+            bool(_denoise_req) if _denoise_req is not None
+            else current_app.config.get('LAVASR_DENOISE', False)
+        ) and lavasr_enabled
+
+        # Enhancement requires buffering the full waveform — incompatible with streaming.
+        if (do_enhance or do_denoise) and use_streaming:
+            logger.info('LavaSR enhancement requested — switching from streaming to batch mode')
+            use_streaming = False
+
         if use_streaming:
             return _stream_audio(tts, voice_state, text, target_format, voice_name=voice, req_text=text)
-        return _generate_file(tts, voice_state, text, target_format, voice_name=voice, req_text=text)
+        return _generate_file(
+            tts, voice_state, text, target_format,
+            do_enhance=do_enhance, do_denoise=do_denoise,
+            voice_name=voice, req_text=text,
+        )
 
     except ValueError as e:
         logger.warning(f'Voice loading failed: {e}')
@@ -560,16 +663,33 @@ def generate_speech():
         return jsonify({'error': str(e)}), 500
 
 
-def _generate_file(tts, voice_state, text: str, fmt: str, voice_name: str = '', req_text: str = ''):
-    """Generate complete audio and return as file."""
+def _generate_file(tts, voice_state, text: str, fmt: str, do_enhance: bool = False, do_denoise: bool = False, voice_name: str = '', req_text: str = ''):
+    """Generate complete audio, optionally enhance with LavaSR, and return as file."""
     t0 = time.time()
     audio_tensor = tts.generate_audio(voice_state, text)
     generation_time = time.time() - t0
 
     logger.info(f'Generated {len(text)} chars in {generation_time:.2f}s')
 
+    # Apply LavaSR bandwidth extension / denoising if requested.
+    # LavaSR outputs 48 kHz regardless of TTS native sample rate (24 kHz).
+    sample_rate = tts.sample_rate
+    if do_enhance or do_denoise:
+        from app.services.enhancer import get_enhancer_service
+        try:
+            audio_tensor, sample_rate = get_enhancer_service().enhance(
+                audio_tensor,
+                input_sr=tts.sample_rate,
+                do_enhance=do_enhance,
+                do_denoise=do_denoise,
+            )
+            logger.info(f'LavaSR: {tts.sample_rate} Hz → {sample_rate} Hz (enhance={do_enhance}, denoise={do_denoise})')
+        except Exception as exc:
+            logger.error(f'LavaSR enhancement failed — falling back to raw audio: {exc}')
+            sample_rate = tts.sample_rate
+
     # Record monitor event — for batch mode TTFA equals the full generation time
-    audio_duration = audio_tensor.shape[-1] / max(tts.sample_rate, 1)
+    audio_duration = audio_tensor.shape[-1] / max(sample_rate, 1)
     from app.services import monitor_service
     monitor_service.record_event({
         'ts': t0,
@@ -580,9 +700,10 @@ def _generate_file(tts, voice_state, text: str, fmt: str, voice_name: str = '', 
         'audio_duration': round(audio_duration, 2),
         'gen_time': round(generation_time, 2),
         'mode': 'batch',
+        'enhanced': do_enhance or do_denoise,
     })
 
-    audio_buffer = convert_audio(audio_tensor, tts.sample_rate, fmt)
+    audio_buffer = convert_audio(audio_tensor, sample_rate, fmt)
     mimetype = get_mime_type(fmt)
 
     return send_file(

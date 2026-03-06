@@ -6,6 +6,7 @@ FROM python:3.10-slim AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 RUN python -m venv /opt/venv
@@ -15,6 +16,14 @@ COPY requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install "setuptools<70" wheel && \
     pip install --no-cache-dir -r /tmp/requirements.txt
+
+# LavaSR — Apache License 2.0, Copyright (c) 2024 Yatharth Sharma
+# Vendored source at lavasr/ with vocos (langtech-bsc matcha fork) installed from git.
+# See LICENSES/LICENSE-LAVASR and lavasr/LICENSE for the full Apache 2.0 text.
+COPY lavasr/ /tmp/lavasr/
+COPY requirements-lavasr.txt /tmp/requirements-lavasr.txt
+RUN pip install --no-cache-dir -r /tmp/requirements-lavasr.txt && \
+    pip install --no-cache-dir /tmp/lavasr
 
 
 FROM python:3.10-slim

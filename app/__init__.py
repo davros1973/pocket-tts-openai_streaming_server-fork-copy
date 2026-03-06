@@ -33,6 +33,11 @@ def create_app(config_overrides: dict = None) -> Flask:
 
     # Apply default config
     app.config['STREAM_DEFAULT'] = Config.STREAM_DEFAULT
+    app.config['TEXT_PREPROCESS_DEFAULT'] = Config.TEXT_PREPROCESS_DEFAULT
+    # LavaSR enhancement defaults (overridable at runtime via POST /v1/enhancer/config)
+    app.config['LAVASR_ENABLED'] = Config.LAVASR_ENABLED
+    app.config['LAVASR_ENHANCE'] = Config.LAVASR_ENHANCE_DEFAULT
+    app.config['LAVASR_DENOISE'] = Config.LAVASR_DENOISE_DEFAULT
     import os
     if os.environ.get('TEMPLATES_AUTO_RELOAD', '').lower() in ('1', 'true', 'yes'):
         app.config['TEMPLATES_AUTO_RELOAD'] = True

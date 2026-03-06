@@ -60,6 +60,22 @@ class Config:
         os.environ.get('POCKET_TTS_TEXT_PREPROCESS_DEFAULT', 'false').lower() == 'true'
     )
 
+    # ── LavaSR audio enhancement ─────────────────────────────────────────────
+    # Set LAVASR_ENABLED=true to activate post-processing with LavaSR.
+    # BWE pipeline: TTS 24 kHz → resample 16 kHz → LavaSR → 48 kHz output.
+    # LavaSR — Apache License 2.0, Copyright (c) 2024 Yatharth Sharma
+    # See LICENSES/LICENSE-LAVASR and lavasr/LICENSE
+    LAVASR_ENABLED = os.environ.get('LAVASR_ENABLED', 'false').lower() == 'true'
+    # Whether bandwidth extension (BWE / upsampling) is on when LAVASR_ENABLED is true
+    LAVASR_ENHANCE_DEFAULT = os.environ.get('LAVASR_ENHANCE_DEFAULT', 'true').lower() == 'true'
+    # Whether ULUNAS denoising is on by default (adds a little latency; off by default
+    # because TTS output is already clean)
+    LAVASR_DENOISE_DEFAULT = os.environ.get('LAVASR_DENOISE_DEFAULT', 'false').lower() == 'true'
+    # HuggingFace model repo ID or absolute path to a local snapshot directory
+    LAVASR_MODEL = os.environ.get('LAVASR_MODEL', 'YatharthS/LavaSR')
+    # Inference device — 'cpu' works well; 'cuda' only if GPU is available in container
+    LAVASR_DEVICE = os.environ.get('LAVASR_DEVICE', 'cpu')
+
     # Docker detection
     @staticmethod
     def _is_docker() -> bool:

@@ -43,6 +43,12 @@ services:
       - TEMPLATES_AUTO_RELOAD=true
       - HF_HOME=/root/.cache/huggingface
       - HF_TOKEN=${HF_TOKEN:-}
+      # LavaSR audio enhancement (set LAVASR_ENABLED=true to activate)
+      - LAVASR_ENABLED=${LAVASR_ENABLED:-false}
+      - LAVASR_ENHANCE_DEFAULT=${LAVASR_ENHANCE_DEFAULT:-true}
+      - LAVASR_DENOISE_DEFAULT=${LAVASR_DENOISE_DEFAULT:-false}
+      - LAVASR_MODEL=${LAVASR_MODEL:-YatharthS/LavaSR}
+      - LAVASR_DEVICE=${LAVASR_DEVICE:-cpu}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]

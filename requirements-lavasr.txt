@@ -1,0 +1,15 @@
+# LavaSR audio-enhancement dependencies — installed on top of main requirements.
+#
+# LavaSR — Apache License 2.0
+#   Copyright (c) 2024 Yatharth Sharma <yatharthsharma3501@gmail.com>
+#   https://github.com/ysharma3501/LavaSR
+#   See LICENSES/LICENSE-LAVASR for the full Apache 2.0 text.
+#
+# These packages are kept separate so the image can optionally be built
+# without LavaSR support (set LAVASR_ENABLED=false and skip this file).
+
+# Vocos acoustic vocoder — LavaSR uses the langtech-bsc/matcha fork
+vocos @ git+https://github.com/langtech-bsc/vocos.git@matcha
+
+# Audio feature extraction (required by LavaSR internally)
+librosa>=0.10.0

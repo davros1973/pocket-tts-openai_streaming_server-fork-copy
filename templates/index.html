@@ -244,6 +244,7 @@
       <div class="stat-row"><span class="stat-label">Sample Rate</span><span class="stat-value" id="svc-sample-rate">24 000 Hz</span></div>
       <div class="stat-row"><span class="stat-label">Voices Available</span><span class="stat-value" id="svc-voices-count">Loading…</span></div>
       <div class="stat-row"><span class="stat-label">Streaming Default</span><span class="stat-value"><span class="badge green">Enabled</span></span></div>
+      <div class="stat-row"><span class="stat-label">Enhancement</span><span class="stat-value" id="svc-enhance-status"><span class="badge grey">—</span></span></div>
     </div>
 
     <div class="card">
@@ -357,6 +358,49 @@ with client.audio.speech.with_streaming_response.create(
       <div class="stat-row"><span class="stat-label">WSGI Server</span><span class="stat-value">Waitress (4 threads)</span></div>
     </div>
   </div>
+
+  <!-- LavaSR Audio Enhancement card -->
+  <div class="card" style="margin-top:20px">
+    <div class="card-title">Audio Enhancement — LavaSR <small style="font-weight:400;color:var(--text-dim);text-transform:none;font-size:11px;letter-spacing:0">Apache 2.0 &bull; <a href="https://github.com/ysharma3501/LavaSR" target="_blank">YatharthS/LavaSR</a></small></div>
+    <div class="grid2">
+      <div>
+        <div class="stat-row"><span class="stat-label">Available in image</span><span class="stat-value" id="enhance-available">—</span></div>
+        <div class="stat-row"><span class="stat-label">Model loaded</span><span class="stat-value" id="enhance-model-loaded">—</span></div>
+        <div class="stat-row"><span class="stat-label">Model ID</span><span class="stat-value" id="enhance-model-id">—</span></div>
+        <div class="stat-row"><span class="stat-label">Output sample rate</span><span class="stat-value" id="enhance-output-sr">—</span></div>
+      </div>
+      <div>
+        <div class="form-row" style="margin-top:4px">
+          <label>Enable enhancement globally (LAVASR_ENABLED server setting)</label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="enhance-enabled-toggle" onchange="saveEnhancerConfig()" style="width:auto">
+            <span style="font-size:13px">Post-process TTS output with LavaSR</span>
+          </label>
+        </div>
+        <div class="form-row">
+          <label>Bandwidth extension (BWE) — upsample TTS 24 kHz → 48 kHz</label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="enhance-bwe-toggle" onchange="saveEnhancerConfig()" style="width:auto" checked>
+            <span style="font-size:13px">Apply BWE by default</span>
+          </label>
+        </div>
+        <div class="form-row">
+          <label title="ULUNAS denoising — useful for noisy voice recordings; clean TTS doesn't need it">Denoising (ULUNAS) — adds latency; off by default for clean TTS</label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="enhance-denoise-toggle" onchange="saveEnhancerConfig()" style="width:auto">
+            <span style="font-size:13px">Apply denoising by default</span>
+          </label>
+        </div>
+        <div class="form-actions">
+          <button class="btn secondary small" id="enhance-load-btn" onclick="loadEnhancerModel()">Load LavaSR Model Now</button>
+          <span id="enhance-load-status" style="font-size:12px;color:var(--text-dim)"></span>
+        </div>
+      </div>
+    </div>
+    <div class="info-box" style="margin-top:14px;font-size:12px">
+      <strong style="color:var(--text)">How it works:</strong> TTS output (24 kHz) is resampled to 16 kHz, passed through LavaSR bandwidth-extension + optional denoising, and output at 48 kHz. Enhancement buffers the full waveform so streaming auto-switches to batch mode. First load downloads ~150 MB from HuggingFace (cached after that). License: Apache 2.0 — see <code>LICENSES/LICENSE-LAVASR</code>.
+    </div>
+  </div>
 </div>
 
 <!-- ══════════════════════ VOICES ══════════════════════ -->
@@ -380,6 +424,10 @@ with client.audio.speech.with_streaming_response.create(
   <div id="voice-test-section" style="display:none;" class="card">
     <div class="card-title" id="voice-test-name">Testing voice</div>
     <div id="voice-test-status">Generating…</div>
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text-dim);white-space:nowrap" title="Apply LavaSR bandwidth extension for this preview">
+      <input type="checkbox" id="voice-test-enhance-toggle" style="width:auto">
+      ✨ Enhance
+    </label>
     <audio id="voice-test-audio" controls></audio>
     <button class="player-close" onclick="closeVoicePlayer()" title="Close">✕</button>
   </div>
@@ -644,6 +692,12 @@ with client.audio.speech.with_streaming_response.create(
         <span style="color:var(--text-dim);font-size:12px">No saved texts yet</span>
       </div>
     </div>
+    <div class="form-row" style="margin-bottom:8px">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer" title="Apply LavaSR bandwidth extension (requires LAVASR_ENABLED=true on the server). Overrides the server default for this request.">
+        <input type="checkbox" id="batch-enhance-toggle" style="width:auto">
+        <span style="font-size:12px;color:var(--text-dim)">✨ Enhance audio (LavaSR BWE) — per-request override</span>
+      </label>
+    </div>
     <div class="form-actions">
       <button class="btn" id="batch-btn" onclick="runBatch()">▶ Generate</button>
       <span class="timing" id="batch-timing"></span>
@@ -811,6 +865,7 @@ async function init() {
   loadVoices();  // populates Voices tab grid + all voice selects + counts
   loadTestTexts();  // populates Texts tab + saved-text-buttons in Test Page
   loadVoiceCount();
+  loadEnhancerStatus();  // LavaSR status
 }
 
 async function loadVoiceCount() {
@@ -1531,7 +1586,7 @@ async function testVoice(voiceId, voiceName) {
     const resp = await fetch(`${API}/v1/audio/speech`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'pocket-tts', input: `Hello, I am ${voiceName}, testing on xarta.`, voice: voiceId, response_format: 'wav', stream: false }),
+      body: JSON.stringify({ model: 'pocket-tts', input: `Hello, I am ${voiceName}, testing on xarta.`, voice: voiceId, response_format: 'wav', stream: false, ...(document.getElementById('voice-test-enhance-toggle')?.checked ? { enhance: true } : {}) }),
       signal: AbortSignal.timeout(30000),
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -1624,7 +1679,7 @@ async function runBatch() {
     const resp = await fetch(`${API}/v1/audio/speech`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'pocket-tts', input: text, voice, response_format: fmt, stream: false }),
+      body: JSON.stringify({ model: 'pocket-tts', input: text, voice, response_format: fmt, stream: false, ...(document.getElementById('batch-enhance-toggle')?.checked ? { enhance: true } : {}) }),
     });
     if (!resp.ok) {
       const errText = await resp.text();
@@ -2745,6 +2800,83 @@ async function matrixToggleTag(voiceId, tagId, checkbox) {
   }
 }
 // ── End Matrix ──────────────────────────────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════════════
+// LavaSR Audio Enhancement
+// ══════════════════════════════════════════════════════════════════
+async function loadEnhancerStatus() {
+  try {
+    const r = await fetch(`${API}/v1/enhancer/status`, { signal: AbortSignal.timeout(5000) });
+    if (!r.ok) throw new Error('not available');
+    const d = await r.json();
+    // Dashboard badge
+    const badge = document.getElementById('svc-enhance-status');
+    if (badge) {
+      badge.innerHTML = d.enabled
+        ? '<span class="badge green">Enabled</span>'
+        : '<span class="badge grey">Disabled</span>';
+    }
+    // Config card
+    const av = document.getElementById('enhance-available');
+    const ml = document.getElementById('enhance-model-loaded');
+    const mid = document.getElementById('enhance-model-id');
+    const osr = document.getElementById('enhance-output-sr');
+    if (av) av.innerHTML = d.available ? '<span class="badge green">Yes</span>' : '<span class="badge red">No</span>';
+    if (ml) ml.innerHTML = d.model_loaded ? '<span class="badge green">Loaded</span>' : '<span class="badge grey">Not loaded</span>';
+    if (mid) mid.textContent = d.model_id || '—';
+    if (osr) osr.textContent = d.output_sr ? `${d.output_sr.toLocaleString()} Hz` : '—';
+    // Sync toggles
+    const enToggle = document.getElementById('enhance-enabled-toggle');
+    const bweToggle = document.getElementById('enhance-bwe-toggle');
+    const dnToggle = document.getElementById('enhance-denoise-toggle');
+    if (enToggle) enToggle.checked = !!d.enabled;
+    if (bweToggle) bweToggle.checked = d.enhance_default !== false;
+    if (dnToggle) dnToggle.checked = !!d.denoise_default;
+    // Sync batch enhance toggle default
+    const batchToggle = document.getElementById('batch-enhance-toggle');
+    if (batchToggle) batchToggle.checked = !!d.enabled && d.enhance_default !== false;
+  } catch (e) {
+    const badge = document.getElementById('svc-enhance-status');
+    if (badge) badge.innerHTML = '<span class="badge grey">—</span>';
+  }
+}
+
+async function saveEnhancerConfig() {
+  try {
+    const enabled = document.getElementById('enhance-enabled-toggle')?.checked ?? false;
+    const enhance = document.getElementById('enhance-bwe-toggle')?.checked ?? true;
+    const denoise = document.getElementById('enhance-denoise-toggle')?.checked ?? false;
+    await fetch(`${API}/v1/enhancer/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled, enhance, denoise }),
+    });
+    // Refresh status to confirm
+    await loadEnhancerStatus();
+    const el = document.getElementById('cfg-saved');
+    if (el) { el.style.display = 'inline'; setTimeout(() => { el.style.display = 'none'; }, 2000); }
+  } catch (e) {
+    console.error('saveEnhancerConfig failed:', e);
+  }
+}
+
+async function loadEnhancerModel() {
+  const btn = document.getElementById('enhance-load-btn');
+  const status = document.getElementById('enhance-load-status');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Loading…'; }
+  if (status) status.textContent = 'Loading LavaSR model…';
+  try {
+    const r = await fetch(`${API}/v1/enhancer/load`, { method: 'POST', signal: AbortSignal.timeout(120000) });
+    const d = await r.json();
+    if (status) status.textContent = d.status === 'loaded' ? '✓ Loaded' : d.status === 'already_loaded' ? '✓ Already loaded' : `Error: ${d.error || 'unknown'}`;
+    await loadEnhancerStatus();
+  } catch (e) {
+    if (status) status.textContent = `Error: ${e.message}`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Load LavaSR Model Now'; }
+  }
+}
+
 
 window.addEventListener('DOMContentLoaded', init);
 </script>
