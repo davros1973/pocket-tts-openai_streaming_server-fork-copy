@@ -59,13 +59,14 @@
   .form-row { margin-bottom: 14px; }
   .form-actions { display: flex; gap: 10px; margin-top: 14px; align-items: center; flex-wrap: wrap; }
 
-  button.btn { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; transition: 0.15s; }
-  button.btn:hover { background: var(--accent-dim); }
+  button.btn, a.btn { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; transition: 0.15s; }
+  button.btn:hover, a.btn:hover { background: var(--accent-dim); }
   button.btn:disabled { opacity: 0.45; cursor: not-allowed; }
-  button.btn.secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
-  button.btn.secondary:hover { background: var(--border); }
+  button.btn.secondary, a.btn.secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  button.btn.secondary:hover, a.btn.secondary:hover { background: var(--border); }
   button.btn.danger { background: var(--red); }
-  button.btn.small { padding: 5px 11px; font-size: 12px; }
+  button.btn.small, a.btn.small { padding: 5px 11px; font-size: 12px; }
+  a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 
   pre { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 14px; font-family: var(--mono); font-size: 12px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
   code { font-family: var(--mono); font-size: 12px; background: var(--surface2); padding: 1px 5px; border-radius: 3px; }
@@ -1069,6 +1070,14 @@ function renderVoices(voices) {
       ? `<button class="btn small danger" onclick="confirmDeleteUserVoice('${escAttr(v.id)}')" title="Permanently delete uploaded voice">🗑 Delete</button>`
       : '';
 
+    const voiceStem = v.id.includes('.') ? v.id.split('.').slice(0, -1).join('.') : v.id;
+    const audioBtn = !isBuiltin
+      ? `<a class="btn small secondary" href="${API}/v1/voices/${encodeURIComponent(v.id)}/download/audio" download="${escAttr(v.id)}" title="Download audio reference file (${escAttr(v.id)})">⬇ Audio</a>`
+      : '';
+    const vectorBtn = v.has_vector
+      ? `<a class="btn small secondary" href="${API}/v1/voices/${encodeURIComponent(v.id)}/download/vector" download="${escAttr(voiceStem)}.safetensors" title="Download voice vector embedding (.safetensors)">⬇ Vector</a>`
+      : '';
+
     return `<div class="voice-card${isHidden ? ' hidden-voice' : ''}" id="vc-${escAttr(v.id)}">
       <div class="voice-name">🎙 ${escHtml(v.name)}</div>
       <div class="voice-meta">
@@ -1088,6 +1097,7 @@ function renderVoices(voices) {
       <div class="flex-gap" style="margin-top:4px;gap:6px">
         <button class="btn small" onclick="testVoice('${escAttr(v.id)}','${escAttr(v.name)}')">&#9654; Test</button>
         <button class="btn small secondary" onclick="toggleHideVoice('${escAttr(v.id)}')" title="${isHidden ? 'Unhide voice' : 'Hide voice from lists and dropdowns'}">${isHidden ? '👁 Unhide' : '🚫 Hide'}</button>
+        ${audioBtn}${vectorBtn}
         ${deleteBtn}
       </div>
     </div>`;

@@ -83,10 +83,17 @@ def list_voices():
     """
     List available voices (OpenAI-compatible format, extended with meta).
     """
+    from pathlib import Path
     tts = get_tts_service()
     voices = tts.list_voices()
     meta_svc = get_voice_meta_service()
     all_meta = meta_svc.all_voice_meta()
+
+    def _has_vector(voice_id: str) -> bool:
+        if not tts.voices_cache_dir:
+            return False
+        stem = Path(voice_id).stem if '.' in voice_id else voice_id
+        return (Path(tts.voices_cache_dir) / f'{stem}.safetensors').exists()
 
     return jsonify(
         {
@@ -101,6 +108,7 @@ def list_voices():
                     'hidden': all_meta.get(v['id'], {}).get('hidden', False),
                     'tags': all_meta.get(v['id'], {}).get('tags', []),
                     'note': all_meta.get(v['id'], {}).get('note', ''),
+                    'has_vector': _has_vector(v['id']),
                 }
                 for v in voices
             ],
@@ -122,6 +130,39 @@ def precompute_voices():
             yield json.dumps(progress) + '\n'
 
     return Response(stream_with_context(generate()), mimetype='application/x-ndjson')
+
+
+@api.route('/v1/voices/<voice_id>/download/audio', methods=['GET'])
+def download_voice_audio(voice_id):
+    """
+    Download the raw audio reference file for a custom voice (WAV/MP3/etc).
+    Returns 404 for built-in voices (no audio file on disk).
+    """
+    from pathlib import Path
+    tts = get_tts_service()
+    for search_dir in filter(None, [tts.voices_dir, tts.voices_user_dir]):
+        p = Path(search_dir) / voice_id
+        if p.exists() and p.is_file():
+            return send_file(str(p), as_attachment=True, download_name=p.name)
+    return jsonify({'error': f'Audio file for voice {voice_id!r} not found on disk. Built-in voices have no local audio file.'}), 404
+
+
+@api.route('/v1/voices/<voice_id>/download/vector', methods=['GET'])
+def download_voice_vector(voice_id):
+    """
+    Download the pre-computed .safetensors state file for a voice (if cached).
+    This is the voice embedding — import it to another pocket-tts instance to
+    use the voice without the original audio file.
+    """
+    from pathlib import Path
+    tts = get_tts_service()
+    if not tts.voices_cache_dir:
+        return jsonify({'error': 'Voice cache directory not configured'}), 503
+    stem = Path(voice_id).stem if '.' in voice_id else voice_id
+    cache_file = Path(tts.voices_cache_dir) / f'{stem}.safetensors'
+    if not cache_file.exists():
+        return jsonify({'error': f'No cached vector file for {voice_id!r}. Run Precompute on the Voices tab first.'}), 404
+    return send_file(str(cache_file), as_attachment=True, download_name=cache_file.name)
 
 
 # ══════════════════════════════════════════════════════════════════
