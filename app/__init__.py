@@ -33,6 +33,10 @@ def create_app(config_overrides: dict = None) -> Flask:
 
     # Apply default config
     app.config['STREAM_DEFAULT'] = Config.STREAM_DEFAULT
+    import os
+    if os.environ.get('TEMPLATES_AUTO_RELOAD', '').lower() in ('1', 'true', 'yes'):
+        app.config['TEMPLATES_AUTO_RELOAD'] = True
+        app.jinja_env.auto_reload = True
 
     # Apply overrides
     if config_overrides:

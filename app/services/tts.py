@@ -41,6 +41,7 @@ class TTSService:
         self.voice_cache: dict = {}
         self.voices_dir: str | None = None
         self.voices_cache_dir: str | None = None
+        self.voices_user_dir: str | None = None
         self._model_loaded = False
 
     @property
@@ -127,6 +128,14 @@ class TTSService:
             self.voices_cache_dir = str(cache_path)
             logger.info(f'Voice cache directory: {self.voices_cache_dir}')
 
+        # Set up user-uploaded voices directory (gitignored on host)
+        user_dir_env = Config.VOICES_USER_DIR
+        if user_dir_env:
+            user_path = Path(user_dir_env)
+            user_path.mkdir(parents=True, exist_ok=True)
+            self.voices_user_dir = str(user_path)
+            logger.info(f'User voices directory: {self.voices_user_dir}')
+
     def get_voice_state(self, voice_id_or_path: str) -> dict:
         """
         Resolve voice ID to a model state with caching.
@@ -210,17 +219,17 @@ class TTSService:
         if voice_id_or_path.lower() in Config.BUILTIN_VOICES:
             return voice_id_or_path.lower()
 
-        # Check voices directory
-        if self.voices_dir:
+        # Check voices directory then user voices directory
+        for search_dir in filter(None, [self.voices_dir, self.voices_user_dir]):
             for ext in Config.VOICE_EXTENSIONS:
                 # Try exact match first
-                possible_path = os.path.join(self.voices_dir, voice_id_or_path)
+                possible_path = os.path.join(search_dir, voice_id_or_path)
                 if os.path.exists(possible_path):
                     return self._prefer_cache(os.path.abspath(possible_path))
 
                 # Try with extension
                 if not voice_id_or_path.endswith(ext):
-                    possible_path = os.path.join(self.voices_dir, voice_id_or_path + ext)
+                    possible_path = os.path.join(search_dir, voice_id_or_path + ext)
                     if os.path.exists(possible_path):
                         return self._prefer_cache(os.path.abspath(possible_path))
 
@@ -324,17 +333,23 @@ class TTSService:
         Yields progress dicts (NDJSON-friendly). Skips already-cached voices.
         Each .safetensors loads ~10x faster than re-encoding the source WAV.
         """
-        if not self.voices_dir or not self.voices_cache_dir:
+        if not (self.voices_dir or self.voices_user_dir) or not self.voices_cache_dir:
             yield {'status': 'error', 'error': 'voices_dir or voices_cache_dir not configured'}
             return
 
         from pocket_tts.models.tts_model import export_model_state
 
         audio_exts = {'.wav', '.mp3', '.flac'}
-        voice_files = sorted(
-            [f for f in Path(self.voices_dir).iterdir() if f.suffix.lower() in audio_exts],
-            key=lambda f: f.name.lower(),
-        )
+        # Collect from community AND user voices dirs
+        search_dirs = [d for d in [self.voices_dir, self.voices_user_dir] if d and Path(d).is_dir()]
+        all_files: list = []
+        seen_stems: set = set()
+        for search_dir in search_dirs:
+            for f in sorted(Path(search_dir).iterdir(), key=lambda x: x.name.lower()):
+                if f.suffix.lower() in audio_exts and f.stem not in seen_stems:
+                    all_files.append(f)
+                    seen_stems.add(f.stem)
+        voice_files = all_files
         total = len(voice_files)
         done = 0
         errors = []
@@ -388,32 +403,34 @@ class TTSService:
         for voice in builtin_sorted:
             voices.append({'id': voice, 'name': voice.capitalize(), 'type': 'builtin'})
 
-        # Custom voices from directory
-        custom_voices = []
-        if self.voices_dir and os.path.isdir(self.voices_dir):
-            voice_dir = Path(self.voices_dir)
+        # Helper: collect audio voices from a directory
+        def _scan_dir(directory: str, user_uploaded: bool) -> list:
+            result = []
+            d = Path(directory)
+            if not d.is_dir():
+                return result
+            audio_exts = {e for e in Config.VOICE_EXTENSIONS if e != '.safetensors'}
+            collected = []
+            for ext in audio_exts:
+                collected.extend(d.glob(f'*{ext}'))
+            collected.sort(key=lambda f: f.name.lower())
+            for vf in collected:
+                clean_name = vf.stem.replace('_', ' ').replace('-', ' ').title()
+                result.append({
+                    'id': vf.name,
+                    'name': clean_name,
+                    'type': 'custom',
+                    'user_uploaded': user_uploaded,
+                })
+            return result
 
-            # Collect all valid files
-            voice_files = []
-            for ext in Config.VOICE_EXTENSIONS:
-                voice_files.extend(voice_dir.glob(f'*{ext}'))
+        # Community voices (bundled in repo)
+        if self.voices_dir:
+            voices.extend(_scan_dir(self.voices_dir, user_uploaded=False))
 
-            # Sort alphabetically by filename
-            voice_files.sort(key=lambda f: f.name.lower())
-
-            for voice_file in voice_files:
-                # Format name: "bobby_mcfern" -> "Bobby Mcfern"
-                clean_name = voice_file.stem.replace('_', ' ').replace('-', ' ').title()
-
-                custom_voices.append(
-                    {
-                        'id': voice_file.name,
-                        'name': clean_name,
-                        'type': 'custom',
-                    }
-                )
-
-        voices.extend(custom_voices)
+        # User-uploaded voices (gitignored, private)
+        if self.voices_user_dir:
+            voices.extend(_scan_dir(self.voices_user_dir, user_uploaded=True))
         return voices
 
 

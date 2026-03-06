@@ -36,7 +36,7 @@ COPY server.py ./
 
 # Pre-create directories that will be volume-mounted or used at runtime
 RUN mkdir -p /app/logs /app/voices /app/templates /app/static \
-             /app/voices_cache /root/.cache/huggingface
+             /app/voices_cache /app/voices_user /app/data /root/.cache/huggingface
 
 ENV POCKET_TTS_HOST=0.0.0.0 \
     POCKET_TTS_PORT=8000 \

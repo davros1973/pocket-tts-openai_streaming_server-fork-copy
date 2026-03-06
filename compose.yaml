@@ -22,6 +22,10 @@ services:
       - ./voices:/app/voices:ro
       # Pre-computed .safetensors voice state cache (persisted; fast loads on restart)
       - ./voices_cache:/app/voices_cache
+      # Private user-uploaded voices (gitignored — not committed to repo)
+      - ./voices_user:/app/voices_user
+      # Persistent server-side data: voice-meta.json (tags, hidden state, notes)
+      - ./data:/app/data
       # Persist HuggingFace model cache between restarts
       - pockettts-openai-hf-cache:/root/.cache/huggingface
       # Persist server logs
@@ -31,9 +35,12 @@ services:
       - POCKET_TTS_PORT=8000
       - POCKET_TTS_VOICES_DIR=/app/voices
       - POCKET_TTS_VOICES_CACHE_DIR=/app/voices_cache
+      - POCKET_TTS_VOICES_USER_DIR=/app/voices_user
+      - POCKET_TTS_VOICES_META_PATH=/app/data/voice-meta.json
       - POCKET_TTS_LOG_DIR=/app/logs
       - POCKET_TTS_LOG_LEVEL=INFO
       - POCKET_TTS_STREAM_DEFAULT=true
+      - TEMPLATES_AUTO_RELOAD=true
       - HF_HOME=/root/.cache/huggingface
       - HF_TOKEN=${HF_TOKEN:-}
     restart: unless-stopped

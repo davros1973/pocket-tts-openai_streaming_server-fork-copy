@@ -25,6 +25,7 @@ from app.services.audio import (
 )
 from app.services.preprocess import TextPreprocessor
 from app.services.tts import get_tts_service
+from app.services.voice_meta import get_voice_meta_service
 
 logger = get_logger('routes')
 
@@ -79,12 +80,12 @@ def health():
 @api.route('/v1/voices', methods=['GET'])
 def list_voices():
     """
-    List available voices.
-
-    Returns OpenAI-compatible voice list format.
+    List available voices (OpenAI-compatible format, extended with meta).
     """
     tts = get_tts_service()
     voices = tts.list_voices()
+    meta_svc = get_voice_meta_service()
+    all_meta = meta_svc.all_voice_meta()
 
     return jsonify(
         {
@@ -95,6 +96,10 @@ def list_voices():
                     'name': v['name'],
                     'object': 'voice',
                     'type': v.get('type', 'builtin'),
+                    'user_uploaded': v.get('user_uploaded', False),
+                    'hidden': all_meta.get(v['id'], {}).get('hidden', False),
+                    'tags': all_meta.get(v['id'], {}).get('tags', []),
+                    'note': all_meta.get(v['id'], {}).get('note', ''),
                 }
                 for v in voices
             ],
@@ -116,6 +121,202 @@ def precompute_voices():
             yield json.dumps(progress) + '\n'
 
     return Response(stream_with_context(generate()), mimetype='application/x-ndjson')
+
+
+# ══════════════════════════════════════════════════════════════════
+# Voice Metadata — tags & hidden state (server-side persistence)
+# ══════════════════════════════════════════════════════════════════
+
+@api.route('/v1/voice-meta', methods=['GET'])
+def get_voice_meta_dump():
+    """Return full voice-meta snapshot: {version, tags, voices}."""
+    return jsonify(get_voice_meta_service().full_dump())
+
+
+@api.route('/v1/voices/<voice_id>/meta', methods=['GET'])
+def get_single_voice_meta(voice_id):
+    """Return metadata for a single voice."""
+    return jsonify(get_voice_meta_service().get_voice_meta(voice_id))
+
+
+@api.route('/v1/voices/<voice_id>/meta', methods=['PATCH'])
+def patch_voice_meta(voice_id):
+    """Update hidden/tags/note for a voice. All fields optional."""
+    data = request.json or {}
+    result = get_voice_meta_service().set_voice_meta(
+        voice_id,
+        hidden=data.get('hidden'),
+        tags=data.get('tags'),
+        note=data.get('note'),
+    )
+    return jsonify(result)
+
+
+# ──────────────────────────────────────────────────────────── tags ───
+
+@api.route('/v1/tags', methods=['GET'])
+def get_tags():
+    """List all tags including voice counts."""
+    svc = get_voice_meta_service()
+    tags = svc.list_tags()
+    meta_dump = svc.all_voice_meta()
+    # Annotate with voice counts
+    for tag in tags:
+        tag['voice_count'] = sum(
+            1 for v in meta_dump.values() if tag['id'] in v.get('tags', [])
+        )
+    return jsonify({'object': 'list', 'data': tags})
+
+
+@api.route('/v1/tags', methods=['POST'])
+def create_tag():
+    """Create a new tag. Body: {name, color?, parent?}."""
+    data = request.json or {}
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'error': 'name is required'}), 400
+    color = data.get('color', '#5c6ef8')
+    parent = data.get('parent')
+    tag = get_voice_meta_service().create_tag(name, color=color, parent=parent)
+    return jsonify(tag), 201
+
+
+@api.route('/v1/tags/<tag_id>', methods=['PATCH'])
+def update_tag(tag_id):
+    """Rename/recolor a tag. Body: {name?, color?, parent?}."""
+    data = request.json or {}
+    result = get_voice_meta_service().update_tag(
+        tag_id,
+        name=data.get('name'),
+        color=data.get('color'),
+        parent=data.get('parent'),
+    )
+    if result is None:
+        return jsonify({'error': 'tag not found'}), 404
+    return jsonify(result)
+
+
+@api.route('/v1/tags/<tag_id>', methods=['DELETE'])
+def delete_tag(tag_id):
+    """Delete a tag and unassign it from all voices."""
+    deleted = get_voice_meta_service().delete_tag(tag_id)
+    if not deleted:
+        return jsonify({'error': 'tag not found'}), 404
+    return jsonify({'deleted': True, 'id': tag_id})
+
+
+# ─────────────────────────────────────────── user-uploaded voices ───
+
+@api.route('/v1/voices/user', methods=['GET'])
+def list_user_voices():
+    """List user-uploaded voices (private, from voices_user dir)."""
+    tts = get_tts_service()
+    if not tts.voices_user_dir:
+        return jsonify({'object': 'list', 'data': []})
+    from pathlib import Path
+    from app.config import Config
+    meta_svc = get_voice_meta_service()
+    all_meta = meta_svc.all_voice_meta()
+    user_dir = Path(tts.voices_user_dir)
+    audio_exts = {e for e in Config.VOICE_EXTENSIONS if e != '.safetensors'}
+    files = sorted(
+        [f for f in user_dir.iterdir() if f.suffix.lower() in audio_exts],
+        key=lambda f: f.name.lower(),
+    )
+    data = []
+    for vf in files:
+        clean_name = vf.stem.replace('_', ' ').replace('-', ' ').title()
+        voice_id = vf.name
+        vm = all_meta.get(voice_id, {})
+        data.append({
+            'id': voice_id,
+            'name': clean_name,
+            'type': 'custom',
+            'user_uploaded': True,
+            'hidden': vm.get('hidden', False),
+            'tags': vm.get('tags', []),
+            'note': vm.get('note', ''),
+            'size_bytes': vf.stat().st_size,
+        })
+    return jsonify({'object': 'list', 'data': data})
+
+
+@api.route('/v1/voices/upload', methods=['POST'])
+def upload_voice():
+    """
+    Upload a WAV (or other audio) file as a user voice.
+    Multipart form field: 'file' (required), 'name' (optional label).
+    Saves to voices_user_dir.
+    """
+    from pathlib import Path
+    from werkzeug.utils import secure_filename
+    from app.config import Config
+
+    tts = get_tts_service()
+    if not tts.voices_user_dir:
+        return jsonify({'error': 'User voices directory not configured (POCKET_TTS_VOICES_USER_DIR)'}), 503
+
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part in request'}), 400
+    f = request.files['file']
+    if not f.filename:
+        return jsonify({'error': 'No filename provided'}), 400
+
+    filename = secure_filename(f.filename)
+    ext = Path(filename).suffix.lower()
+    allowed = {e for e in Config.VOICE_EXTENSIONS if e != '.safetensors'}
+    if ext not in allowed:
+        return jsonify({'error': f'File type {ext} not allowed. Accepted: {sorted(allowed)}'}), 400
+
+    dest = Path(tts.voices_user_dir) / filename
+    if dest.exists():
+        # Avoid silent overwrite — require explicit overwrite flag
+        if not request.form.get('overwrite'):
+            return jsonify({'error': f'{filename} already exists. Send overwrite=true to replace.'}), 409
+
+    f.save(str(dest))
+    logger.info(f'User voice uploaded: {filename} ({dest.stat().st_size} bytes)')
+    clean_name = dest.stem.replace('_', ' ').replace('-', ' ').title()
+    return jsonify({
+        'id': filename,
+        'name': clean_name,
+        'type': 'custom',
+        'user_uploaded': True,
+        'size_bytes': dest.stat().st_size,
+    }), 201
+
+
+@api.route('/v1/voices/user/<path:filename>', methods=['DELETE'])
+def delete_user_voice(filename):
+    """Permanently delete a user-uploaded voice file and its metadata."""
+    from pathlib import Path
+    from werkzeug.utils import secure_filename
+
+    tts = get_tts_service()
+    if not tts.voices_user_dir:
+        return jsonify({'error': 'User voices directory not configured'}), 503
+
+    safe = secure_filename(filename)
+    target = Path(tts.voices_user_dir) / safe
+    if not target.exists():
+        return jsonify({'error': f'{filename} not found'}), 404
+
+    target.unlink()
+    logger.info(f'User voice deleted: {filename}')
+
+    # Also remove any cached safetensors for this voice
+    tts_svc = get_tts_service()
+    if tts_svc.voices_cache_dir:
+        cache_file = Path(tts_svc.voices_cache_dir) / f'{target.stem}.safetensors'
+        if cache_file.exists():
+            cache_file.unlink()
+            logger.info(f'Removed cache for deleted voice: {cache_file.name}')
+
+    # Remove from in-memory voice cache
+    abs_path = str(target.resolve())
+    tts.voice_cache.pop(abs_path, None)
+
+    return jsonify({'deleted': True, 'id': filename})
 
 
 @api.route('/v1/audio/speech', methods=['POST'])

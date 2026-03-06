@@ -43,6 +43,12 @@ class Config:
     # Pre-computed voice state cache directory (.safetensors files)
     VOICES_CACHE_DIR = os.environ.get('POCKET_TTS_VOICES_CACHE_DIR', None)
 
+    # User-uploaded voice files (separate from bundled community voices, gitignored)
+    VOICES_USER_DIR = os.environ.get('POCKET_TTS_VOICES_USER_DIR', None)
+
+    # Server-side voice metadata — persistent tags, hidden state, notes
+    VOICES_META_PATH = os.environ.get('POCKET_TTS_VOICES_META_PATH', '/app/data/voice-meta.json')
+
     # Streaming default
     STREAM_DEFAULT = os.environ.get('POCKET_TTS_STREAM_DEFAULT', 'false').lower() == 'true'
 
