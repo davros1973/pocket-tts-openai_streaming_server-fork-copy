@@ -49,6 +49,9 @@ class Config:
     # Server-side voice metadata — persistent tags, hidden state, notes
     VOICES_META_PATH = os.environ.get('POCKET_TTS_VOICES_META_PATH', '/app/data/voice-meta.json')
 
+    # Server-side test text snippets — labelled long texts for TTS testing
+    TEST_TEXTS_PATH = os.environ.get('POCKET_TTS_TEST_TEXTS_PATH', '/app/data/test-texts.json')
+
     # Streaming default
     STREAM_DEFAULT = os.environ.get('POCKET_TTS_STREAM_DEFAULT', 'false').lower() == 'true'
 

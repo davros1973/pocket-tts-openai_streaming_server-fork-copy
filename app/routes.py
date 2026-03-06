@@ -26,6 +26,7 @@ from app.services.audio import (
 from app.services.preprocess import TextPreprocessor
 from app.services.tts import get_tts_service
 from app.services.voice_meta import get_voice_meta_service
+from app.services.test_texts import get_test_texts_service
 
 logger = get_logger('routes')
 
@@ -205,6 +206,17 @@ def delete_tag(tag_id):
     return jsonify({'deleted': True, 'id': tag_id})
 
 
+@api.route('/v1/tags/order', methods=['PUT'])
+def save_tag_order():
+    """Persist user-preferred tag display order. Body: {order: [tid,...]}."""
+    data = request.json or {}
+    order = data.get('order', [])
+    if not isinstance(order, list):
+        return jsonify({'error': 'order must be a list'}), 400
+    saved = get_voice_meta_service().set_tag_order(order)
+    return jsonify({'order': saved})
+
+
 # ─────────────────────────────────────────── user-uploaded voices ───
 
 @api.route('/v1/voices/user', methods=['GET'])
@@ -317,6 +329,60 @@ def delete_user_voice(filename):
     tts.voice_cache.pop(abs_path, None)
 
     return jsonify({'deleted': True, 'id': filename})
+
+
+# ══════════════════════════════════════════════════════════════════
+# Test Texts — server-side persistence for labelled TTS test snippets
+# ══════════════════════════════════════════════════════════════════
+
+@api.route('/v1/test-texts', methods=['GET'])
+def list_test_texts():
+    svc = get_test_texts_service()
+    return jsonify({'data': svc.list_texts()})
+
+
+@api.route('/v1/test-texts/<text_id>', methods=['GET'])
+def get_test_text(text_id):
+    svc = get_test_texts_service()
+    entry = svc.get_text(text_id)
+    if not entry:
+        return jsonify({'error': 'Not found'}), 404
+    return jsonify(entry)
+
+
+@api.route('/v1/test-texts', methods=['POST'])
+def create_test_text():
+    data = request.json or {}
+    label = (data.get('label') or '').strip()
+    text = (data.get('text') or '').strip()
+    if not label or not text:
+        return jsonify({'error': 'label and text are required'}), 400
+    tags = [t.strip() for t in data.get('tags', []) if str(t).strip()]
+    svc = get_test_texts_service()
+    return jsonify(svc.create_text(label, text, tags)), 201
+
+
+@api.route('/v1/test-texts/<text_id>', methods=['PUT'])
+def update_test_text(text_id):
+    data = request.json or {}
+    label = data.get('label')
+    text = data.get('text')
+    tags = data.get('tags')
+    if tags is not None:
+        tags = [t.strip() for t in tags if str(t).strip()]
+    svc = get_test_texts_service()
+    updated = svc.update_text(text_id, label=label, text=text, tags=tags)
+    if not updated:
+        return jsonify({'error': 'Not found'}), 404
+    return jsonify(updated)
+
+
+@api.route('/v1/test-texts/<text_id>', methods=['DELETE'])
+def delete_test_text(text_id):
+    svc = get_test_texts_service()
+    if not svc.delete_text(text_id):
+        return jsonify({'error': 'Not found'}), 404
+    return jsonify({'deleted': True, 'id': text_id})
 
 
 @api.route('/v1/audio/speech', methods=['POST'])

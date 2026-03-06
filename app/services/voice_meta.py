@@ -138,6 +138,22 @@ class VoiceMetaService:
         with self._lock:
             return {k: dict(v) for k, v in self._data.get('voices', {}).items()}
 
+    def get_tag_order(self) -> list:
+        """Return user-preferred tag ordering (list of tag IDs)."""
+        with self._lock:
+            return list(self._data.get('tag_order', []))
+
+    def set_tag_order(self, order: list) -> list:
+        """Persist user-preferred tag ordering. Filters to known IDs, appends any missing."""
+        with self._lock:
+            valid = set(self._data.get('tags', {}).keys())
+            ordered = [tid for tid in order if tid in valid]
+            for tid in sorted(valid - set(ordered)):
+                ordered.append(tid)
+            self._data['tag_order'] = ordered
+            self._save()
+        return ordered
+
     def full_dump(self) -> dict:
         """Return full snapshot — tags catalogue + per-voice entries."""
         with self._lock:
@@ -145,6 +161,7 @@ class VoiceMetaService:
                 'version': self._data.get('version', '1'),
                 'tags': {tid: dict(tdata) for tid, tdata in self._data.get('tags', {}).items()},
                 'voices': {vid: dict(vmeta) for vid, vmeta in self._data.get('voices', {}).items()},
+                'tag_order': list(self._data.get('tag_order', [])),
             }
 
     def voice_count_for_tag(self, tag_id: str) -> int:

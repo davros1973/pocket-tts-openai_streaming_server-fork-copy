@@ -151,6 +151,60 @@
   .step-row { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 16px; font-size: 13px; line-height: 1.65; color: var(--text-dim); }
   .step-row strong { color: var(--text); }
   .purple { --purple: #a78bfa; }
+  /* ── Matrix tab ── */
+  .matrix-wrap { overflow: auto; max-height: calc(100vh - 200px); }
+  .matrix-table { border-collapse: collapse; font-size: 11px; white-space: nowrap; }
+  .matrix-table th, .matrix-table td { border: 1px solid var(--border); padding: 3px 5px; text-align: center; }
+  .matrix-table th { background: var(--card-bg); cursor: pointer; user-select: none; position: sticky; top: 0; z-index: 2; }
+  .matrix-table th.col-label { writing-mode: vertical-rl; text-orientation: mixed; min-height: 90px; vertical-align: bottom; padding: 6px 3px; font-weight: 400; }
+  .matrix-table th.col-name { writing-mode: horizontal-tb; text-align: left; min-width: 160px; font-weight: 600; position: sticky; left: 0; z-index: 3; }
+  .matrix-table td.col-name { text-align: left; position: sticky; left: 0; background: var(--bg); z-index: 1; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+  .matrix-table th.grp-sep, .matrix-table td.grp-sep { border-left: 2px solid var(--accent); }
+  .matrix-table tr.row-hidden td { opacity: 0.35; }
+  .matrix-table th.sort-asc::after { content: ' ▲'; font-size:9px; }
+  .matrix-table th.sort-desc::after { content: ' ▼'; font-size:9px; }
+  .matrix-table input[type=checkbox] { cursor: pointer; width:14px; height:14px; }
+  /* ── RT quick-tag toggles ── */
+  .quick-tag-group { display: flex; gap: 4px; flex-wrap: wrap; }
+  /* ── Undetermined filter checkboxes ── */
+  .filter-check { display: inline-flex; align-items: center; gap: 5px; font-size: 12px;
+    color: var(--text-dim); cursor: pointer; user-select: none; white-space: nowrap; }
+  .filter-check input { cursor: pointer; accent-color: var(--accent); width: 14px; height: 14px; }
+  .filter-check:has(input:checked) { color: var(--accent); font-weight: 600; }
+  .filter-check-disabled { opacity: 0.3; pointer-events: none; }
+  .quick-tag-btn { padding: 3px 11px; border-radius: 50px; font-size: 11px; font-weight: 600;
+    border: 1px solid var(--border); background: var(--card-bg); color: var(--text-dim);
+    cursor: pointer; transition: all .15s; }
+  .quick-tag-btn:hover { border-color: var(--accent); color: var(--text); }
+  .quick-tag-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .quick-tag-btn.missing { border-color: var(--red); color: var(--red); opacity: .6; cursor: not-allowed; }
+  /* ── RT category-chip quick-tagger ── */
+  .rt-cat-chip { padding: 3px 10px; border-radius: 50px; font-size: 11px; font-weight: 600;
+    border: 1px solid var(--chip-color, var(--border)); background: var(--card-bg); color: var(--text-dim);
+    cursor: pointer; transition: all .15s; }
+  .rt-cat-chip:hover, .rt-cat-chip.open { border-color: var(--chip-color, var(--accent)); color: var(--text); background: rgba(255,255,255,.05); }
+  .rt-cat-badge { display: inline-flex; align-items: center; justify-content: center;
+    background: var(--accent); color: #fff; border-radius: 50%; width: 15px; height: 15px;
+    font-size: 9px; font-weight: 700; margin-left: 3px; vertical-align: middle; }
+  .rt-cat-opt { padding: 3px 11px; border-radius: 50px; font-size: 11px; font-weight: 600;
+    border: 1px solid var(--border); background: var(--card-bg); color: var(--text-dim);
+    cursor: pointer; transition: all .15s; }
+  .rt-cat-opt:hover { opacity: .85; }
+  .rt-cat-opt.active { color: #fff; }
+  .rt-cat-drillwrap { display: inline-flex; }
+  .rt-cat-drillwrap .rt-cat-opt { border-radius: 50px 0 0 50px !important; border-right: none; }
+  .rt-cat-drill { padding: 3px 7px; border-radius: 0 50px 50px 0; font-size: 12px; font-weight: 600;
+    border: 1px solid var(--border); border-left: none; background: var(--card-bg);
+    color: var(--text-dim); cursor: pointer; transition: all .15s; }
+  .rt-cat-drill:hover { border-color: var(--accent); color: var(--text); }
+  /* ── Tag-list drag-and-drop ── */
+  .tag-drag-handle { cursor: grab; color: var(--text-dim); padding: 0 5px; user-select: none; font-size: 15px; line-height: 1; }
+  .tag-drag-handle:active { cursor: grabbing; }
+  .tag-row[draggable]:hover { background: rgba(255,255,255,.03); }
+  .tag-row.dragging { opacity: .35; }
+  .tag-row.drag-over { border-top: 2px solid var(--accent); }
+  .tag-row.drag-reparent { background: rgba(92,110,248,.12); outline: 1px dashed var(--accent); border-radius: 4px; }
+  .tag-row.child-tag { padding-left: 22px; }
 </style>
 </head>
 <body>
@@ -168,6 +222,8 @@
   <button data-tab="voices">Voices</button>
   <button data-tab="cloning">Cloning</button>
   <button data-tab="tags">Tags</button>
+  <button data-tab="texts">Texts</button>
+  <button data-tab="matrix">Matrix</button>
   <button data-tab="monitor">Monitor</button>
   <button data-tab="test">Test Page</button>
 </nav>
@@ -445,6 +501,55 @@ with client.audio.speech.with_streaming_response.create(
   </div>
 </div>
 
+<!-- ══════════════════════ TEXTS ══════════════════════ -->
+<div class="tab-panel" id="tab-texts">
+  <div class="section-title">Saved Test Texts</div>
+
+  <!-- Create / Edit form -->
+  <div class="card" id="tt-form-card">
+    <div class="card-title" id="tt-form-title">New Text</div>
+    <div class="form-row">
+      <label>Label</label>
+      <input type="text" id="tt-label" placeholder="e.g. Fantasy novel passage" style="width:100%;box-sizing:border-box">
+    </div>
+    <div class="form-row">
+      <label>Tags <span style="font-weight:400;color:var(--text-dim);font-size:11px">(comma-separated, define your own)</span></label>
+      <input type="text" id="tt-tags" placeholder="e.g. fiction, long, emotional" style="width:100%;box-sizing:border-box">
+    </div>
+    <div class="form-row">
+      <label>Text <span style="font-weight:400;color:var(--text-dim);font-size:11px">(can be very long — pages if you like)</span></label>
+      <textarea id="tt-text" placeholder="Paste your text here…" style="min-height:240px;resize:vertical;font-family:inherit;font-size:13px;width:100%;box-sizing:border-box"></textarea>
+    </div>
+    <div class="flex-gap" style="margin-top:8px;gap:8px;align-items:center">
+      <button class="btn" onclick="saveTestText()">💾 Save</button>
+      <button class="btn secondary" id="tt-cancel-btn" onclick="cancelEditTestText()" style="display:none">Cancel</button>
+      <span id="tt-form-status" style="color:var(--text-dim);font-size:12px"></span>
+    </div>
+    <input type="hidden" id="tt-edit-id">
+  </div>
+
+  <!-- Saved texts list -->
+  <div id="tt-list" style="margin-top:16px">
+    <div style="color:var(--text-dim);font-size:13px">Loading…</div>
+  </div>
+</div>
+
+<!-- ══════════════════════ MATRIX ══════════════════════ -->
+<div class="tab-panel" id="tab-matrix">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap">
+    <div class="section-title" style="margin:0">Voice × Tag Matrix</div>
+    <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer">
+      <input type="checkbox" id="matrix-show-hidden" checked onchange="renderMatrix()"> Show hidden voices
+    </label>
+    <input type="text" id="matrix-filter" placeholder="Filter voices…" style="font-size:12px;padding:3px 8px;background:var(--card-bg);border:1px solid var(--border);border-radius:4px;color:var(--text);width:160px" oninput="renderMatrix()">
+    <button class="btn secondary small" onclick="renderMatrix()">↻ Refresh</button>
+    <span style="font-size:11px;color:var(--text-dim)" id="matrix-info"></span>
+  </div>
+  <div class="matrix-wrap" id="matrix-container">
+    <div style="color:var(--text-dim);font-size:13px">Loading…</div>
+  </div>
+</div>
+
 <!-- ══════════════════════ MONITOR ══════════════════════ -->
 <div class="tab-panel" id="tab-monitor">
   <div class="grid2">
@@ -511,6 +616,18 @@ with client.audio.speech.with_streaming_response.create(
         <button class="btn secondary small" onclick="setPreset('MultiSentence')">Multi-sentence</button>
       </div>
     </div>
+    <div class="form-row">
+      <div class="flex-gap" style="align-items:center;gap:8px;flex-wrap:wrap">
+        <label style="margin:0;white-space:nowrap;font-size:12px;color:var(--text-dim)">Saved texts:</label>
+        <select id="tt-tag-filter" style="font-size:12px;padding:2px 6px;background:var(--card-bg);color:var(--text);border:1px solid var(--border);border-radius:4px" onchange="renderSavedTextButtons()">
+          <option value="">All</option>
+        </select>
+        <button class="btn secondary small" onclick="document.querySelector('[data-tab=texts]').click()" style="font-size:11px" title="Go to Texts tab to add or edit">+ Manage</button>
+      </div>
+      <div class="flex-gap" style="gap:6px;flex-wrap:wrap;margin-top:6px" id="saved-text-buttons">
+        <span style="color:var(--text-dim);font-size:12px">No saved texts yet</span>
+      </div>
+    </div>
     <div class="form-actions">
       <button class="btn" id="batch-btn" onclick="runBatch()">▶ Generate</button>
       <span class="timing" id="batch-timing"></span>
@@ -548,7 +665,20 @@ with client.audio.speech.with_streaming_response.create(
         </div>
       </div>
     </div>
-    <div id="rt-tag-strip" style="display:none; margin: 4px 0 10px"></div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0 2px">
+      <span style="font-size:11px;color:var(--text-dim)">Filter dropdown:</span>
+      <label class="filter-check" title="Show only voices tagged 'unknown' gender — gender not yet determined"><input type="checkbox" id="rt-filter-gender-unk" onchange="onRtFilterChange()"> gender?</label>
+      <label class="filter-check" title="Show only voices with no quality tag assigned"><input type="checkbox" id="rt-filter-quality-unk" onchange="onRtFilterChange()"> quality?</label>
+      <label class="filter-check" title="Show only voices tagged 'accent-unclassified'"><input type="checkbox" id="rt-filter-accent-unk" onchange="onRtFilterChange()"> accent?</label>
+      <span style="color:var(--border);font-size:14px;margin:0 2px">│</span>
+      <label class="filter-check" title="AND-filter: only male"><input type="checkbox" id="rt-filter-male" onchange="onRtFilterChange()"> male</label>
+      <label class="filter-check" title="AND-filter: only female"><input type="checkbox" id="rt-filter-female" onchange="onRtFilterChange()"> female</label>
+      <label class="filter-check" title="AND-filter: only private"><input type="checkbox" id="rt-filter-private" onchange="onRtFilterChange()"> private</label>
+      <label class="filter-check" title="AND-filter: only best"><input type="checkbox" id="rt-filter-best" onchange="onRtFilterChange()"> best</label>
+      <label class="filter-check" title="AND-filter: only good"><input type="checkbox" id="rt-filter-good" onchange="onRtFilterChange()"> good</label>
+    </div>
+    <div id="rt-tag-strip" style="display:none; margin: 4px 0 4px"></div>
+    <div id="rt-quick-tags" style="display:none; margin: 0 0 8px"></div>
     <div class="stream-log" id="rt-log">
       <div class="log-line info">Ready. Press Start Real-time to begin.</div>
     </div>
@@ -600,6 +730,7 @@ let allVoices = [];
 let allVoiceMeta = { version: '1', tags: {}, voices: {} };  // server-side metadata
 let showHiddenVoices = false;
 let activeTagFilter = '';  // tag UUID or '' for all
+let allTestTexts = [];  // server-side saved test text snippets
 
 const BUILTIN_VOICES = ['alba','marius','javert','jean','fantine','cosette','eponine','azelma'];
 
@@ -629,6 +760,8 @@ document.querySelectorAll('#tab-nav button').forEach(btn => {
     if (btn.dataset.tab === 'voices' && allVoices.length === 0) loadVoices();
     if (btn.dataset.tab === 'cloning') loadUserVoicesList();
     if (btn.dataset.tab === 'tags') { loadTags(); renderColorPresets(); }
+    if (btn.dataset.tab === 'texts') loadTestTexts();
+    if (btn.dataset.tab === 'matrix') renderMatrix();
     if (btn.dataset.tab === 'monitor') refreshHealth();
   });
 });
@@ -660,6 +793,7 @@ async function init() {
   await checkHealth();
   setInterval(checkHealth, 30000);
   loadVoices();  // populates Voices tab grid + all voice selects + counts
+  loadTestTexts();  // populates Texts tab + saved-text-buttons in Test Page
   loadVoiceCount();
 }
 
@@ -811,15 +945,16 @@ function renderVoices(voices) {
       ? `<span class="badge yellow" style="font-size:10px">📤 uploaded</span>`
       : `<span class="badge grey" style="font-size:10px">community</span>`;
 
-    const allTagEntries = Object.entries(allVoiceMeta.tags || {});
+    const allTagEntries = orderedTagEntries();
     const tagChecks = allTagEntries.length === 0
       ? `<div style="color:var(--text-dim);font-size:12px">No tags yet — create some on the Tags tab.</div>`
       : allTagEntries.map(([tid, tdata]) => {
           const checked = (vm.tags || []).includes(tid);
+          const indent = tdata.parent ? '\u00a0\u00a0' : '';
           return `<label class="tag-check-row">
             <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleVoiceTag('${escAttr(v.id)}','${escAttr(tid)}')">
             <span class="tag-dot" style="background:${escAttr(tdata.color)}"></span>
-            <span>${escHtml(tdata.name)}</span>
+            <span>${indent}${escHtml(tdata.name)}</span>
           </label>`;
         }).join('');
 
@@ -875,39 +1010,52 @@ function filterVoices() {
 }
 
 function populateVoiceSelects(voices) {
+  const GENDER_PRIORITY = ['male', 'female', 'unknown'];
+  const SOURCE_PRIORITY = ['built-in', 'community', 'private'];
+
+  function tagIdByName(name) {
+    for (const [tid, t] of Object.entries(allVoiceMeta.tags || {})) {
+      if (t.name === name) return tid;
+    }
+    return null;
+  }
+
   // Exclude hidden voices from dropdowns
   const visible = voices.filter(v => !(allVoiceMeta.voices?.[v.id] || {}).hidden);
 
-  const builtin = visible.filter(v => v.type === 'builtin');
-  const custom  = visible.filter(v => v.type !== 'builtin');
+  // For each voice find its gender label and source label from priority lists
+  const groups = {};  // key "gender||source" → {gLabel, sLabel, voices[]}
+  for (const v of visible) {
+    const vtags = new Set((allVoiceMeta.voices?.[v.id]?.tags || [])
+      .map(tid => allVoiceMeta.tags?.[tid]?.name).filter(Boolean));
+    const gLabel = GENDER_PRIORITY.find(g => vtags.has(g)) || '';
+    const sLabel = SOURCE_PRIORITY.find(s => vtags.has(s)) || '';
+    const key = `${gLabel}||${sLabel}`;
+    if (!groups[key]) groups[key] = { gLabel, sLabel, voices: [] };
+    groups[key].voices.push(v);
+  }
+
+  // Sort groups: gender priority first, source priority second
+  const gIdx = n => n ? GENDER_PRIORITY.indexOf(n) : 999;
+  const sIdx = n => n ? SOURCE_PRIORITY.indexOf(n) : 999;
+  const sortedKeys = Object.keys(groups).sort((a, b) => {
+    const [ga, sa] = a.split('||'), [gb, sb] = b.split('||');
+    return gIdx(ga) - gIdx(gb) || sIdx(sa) - sIdx(sb);
+  });
+
+  const GENDER_ICON = { male: '♂', female: '♀', unknown: '?' };
 
   function buildOptions(list) {
     return list.map(v => `<option value="${escAttr(v.id)}">${escHtml(v.name)}</option>`).join('');
   }
 
-  // Group custom voices by their first assigned tag, then Untagged
-  const tagGroups = {};
-  const untagged = [];
-  for (const v of custom) {
-    const vm = allVoiceMeta.voices?.[v.id] || {};
-    const firstTagId = (vm.tags || [])[0];
-    const firstTag = firstTagId && allVoiceMeta.tags?.[firstTagId];
-    if (firstTag) {
-      if (!tagGroups[firstTagId]) tagGroups[firstTagId] = { name: firstTag.name, voices: [] };
-      tagGroups[firstTagId].voices.push(v);
-    } else {
-      untagged.push(v);
-    }
-  }
-
-  const sortedGroups = Object.entries(tagGroups).sort((a, b) => a[1].name.localeCompare(b[1].name));
-
-  let html = `<optgroup label="Built-in (${builtin.length})">${buildOptions(builtin)}</optgroup>`;
-  for (const [, grp] of sortedGroups) {
-    html += `<optgroup label="🏷 ${escHtml(grp.name)} (${grp.voices.length})">${buildOptions(grp.voices)}</optgroup>`;
-  }
-  if (untagged.length) {
-    html += `<optgroup label="Community (${untagged.length})">${buildOptions(untagged)}</optgroup>`;
+  let html = '';
+  for (const key of sortedKeys) {
+    const { gLabel, sLabel, voices: gv } = groups[key];
+    const g = gLabel ? `${GENDER_ICON[gLabel] || ''} ${gLabel}` : '—';
+    const s = sLabel || '—';
+    const label = `${g} / ${s} (${gv.length})`;
+    html += `<optgroup label="${escAttr(label)}">${buildOptions(gv)}</optgroup>`;
   }
 
   ['cfg-voice', 'batch-voice', 'rt-voice', 'stream-voice'].forEach(id => {
@@ -917,9 +1065,14 @@ function populateVoiceSelects(voices) {
     el.innerHTML = html;
     const target = prev || userConfig.voice || 'alba';
     el.value = target;
-    if (!el.value) el.value = builtin[0]?.id || 'alba';
+    if (!el.value) el.value = visible[0]?.id || 'alba';
   });
   renderRtVoiceTags();
+  // Guard: if streaming is active, keep Start button disabled regardless
+  if (rtIsPlaying) {
+    const b = document.getElementById('rt-btn');
+    if (b) b.disabled = true;
+  }
 }
 
 function renderRtVoiceTags() {
@@ -930,20 +1083,34 @@ function renderRtVoiceTags() {
   strip.style.display = '';
 
   const vm = allVoiceMeta.voices?.[voiceId] || {};
+  // Compute which pills to suppress: sole active child of any root parent group
+  // (those are already shown as the chip label, so the pill would be redundant)
+  const _allT = allVoiceMeta.tags || {};
+  const _vtSet = new Set(vm.tags || []);
+  const _rootPs = new Set();
+  for (const [, t] of Object.entries(_allT)) { if (t.parent && _allT[t.parent]) _rootPs.add(t.parent); }
+  for (const pid of [..._rootPs]) { if (_allT[pid]?.parent) _rootPs.delete(pid); }
+  const suppressedPills = new Set();
+  for (const pid of _rootPs) {
+    const actives = Object.entries(_allT).filter(([id, t]) => t.parent === pid && _vtSet.has(id));
+    if (actives.length === 1) suppressedPills.add(actives[0][0]);
+  }
   const vTags = (vm.tags || []).map(tid => allVoiceMeta.tags?.[tid]).filter(Boolean);
-  const tagPills = vTags.map(t =>
-    `<span class="voice-tag-pill" style="background:${escAttr(t.color)}">${escHtml(t.name)}</span>`
-  ).join('');
+  const tagPills = (vm.tags || []).filter(tid => !suppressedPills.has(tid))
+    .map(tid => allVoiceMeta.tags?.[tid]).filter(Boolean)
+    .map(t => `<span class="voice-tag-pill" style="background:${escAttr(t.color)}">${escHtml(t.name)}</span>`)
+    .join('');
 
-  const allTagEntries = Object.entries(allVoiceMeta.tags || {});
+  const allTagEntries = orderedTagEntries();
   const tagChecks = allTagEntries.length === 0
     ? `<div style="color:var(--text-dim);font-size:12px">No tags yet — create some on the Tags tab.</div>`
     : allTagEntries.map(([tid, tdata]) => {
         const checked = (vm.tags || []).includes(tid);
+        const indent = tdata.parent ? '\u00a0\u00a0' : '';
         return `<label class="tag-check-row">
           <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleVoiceTag('${escAttr(voiceId)}','${escAttr(tid)}')">
           <span class="tag-dot" style="background:${escAttr(tdata.color)}"></span>
-          <span>${escHtml(tdata.name)}</span>
+          <span>${indent}${escHtml(tdata.name)}</span>
         </label>`;
       }).join('');
 
@@ -961,6 +1128,270 @@ function renderRtVoiceTags() {
         <button class="btn small" onclick="quickCreateTag('${escAttr(voiceId)}',document.getElementById('rt-teinput').value)">＋</button>
       </div>
     </div>`;
+  renderRtQuickTags(voiceId);
+  // Always preserve disabled state during active playback
+  if (rtIsPlaying) {
+    const b = document.getElementById('rt-btn');
+    if (b) b.disabled = true;
+  }
+}
+
+let _rtOpenCatPid = null;
+let _rtOpenCatVid = null;
+let _rtOpenCatPath = [];  // breadcrumb stack for drill-down navigation
+
+function renderRtQuickTags(voiceId) {
+  const el = document.getElementById('rt-quick-tags');
+  if (!el) return;
+  if (!voiceId) { el.style.display = 'none'; _rtOpenCatPid = null; _rtOpenCatPath = []; return; }
+  el.style.display = '';
+  // Reset open state when voice changes
+  if (voiceId !== _rtOpenCatVid) { _rtOpenCatPid = null; _rtOpenCatPath = []; }
+  _rtOpenCatVid = voiceId;
+  const allTags = allVoiceMeta.tags || {};
+  // Find root-level parents only: have at least one child, but are not children themselves
+  const parentIds = new Set();
+  for (const [, t] of Object.entries(allTags)) {
+    if (t.parent && allTags[t.parent]) parentIds.add(t.parent);
+  }
+  for (const pid of [...parentIds]) {
+    if (allTags[pid]?.parent) parentIds.delete(pid);
+  }
+  if (parentIds.size === 0) {
+    el.innerHTML = `<div style="font-size:11px;color:var(--text-dim)">Create parent/child tag relationships on the Tags tab to enable quick filters here.</div>`;
+    return;
+  }
+  const vm = allVoiceMeta.voices?.[voiceId] || {};
+  const vtags = new Set(vm.tags || []);
+  // Sort parents by tag_order
+  const order = allVoiceMeta.tag_order || [];
+  const orderedParents = [...parentIds].sort((a, b) => {
+    const ai = order.indexOf(a), bi = order.indexOf(b);
+    if (ai === -1 && bi === -1) return 0;
+    if (ai === -1) return 1; if (bi === -1) return -1;
+    return ai - bi;
+  });
+  const chips = orderedParents.map(pid => {
+    const p = allTags[pid];
+    if (!p) return '';
+    const children = Object.entries(allTags).filter(([, t]) => t.parent === pid);
+    const activeChildren = children.filter(([tid]) => vtags.has(tid));
+    const activeCount = activeChildren.length;
+    const isOpen = pid === _rtOpenCatPid;
+    if (activeCount === 1) {
+      // Single selection: show child name + child colour; pill is suppressed above
+      const [, stag] = activeChildren[0];
+      return `<button class="rt-cat-chip${isOpen ? ' open' : ''}" id="rt-cat-${escAttr(pid)}"
+        style="--chip-color:${escAttr(stag.color || '#888')}"
+        onclick="rtCatChipClick('${escAttr(voiceId)}','${escAttr(pid)}')"
+        title="${escAttr(p.name)}">${escHtml(stag.name)} ▾</button>`;
+    }
+    const badge = activeCount > 1 ? `<span class="rt-cat-badge">${activeCount}</span>` : '';
+    return `<button class="rt-cat-chip${isOpen ? ' open' : ''}" id="rt-cat-${escAttr(pid)}"
+      style="--chip-color:${escAttr(p.color || '#888')}"
+      onclick="rtCatChipClick('${escAttr(voiceId)}','${escAttr(pid)}')"
+      >${escHtml(p.name)}${badge} ▾</button>`;
+  }).filter(Boolean).join('');
+  el.innerHTML = `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:2px 0">
+    <span style="font-size:11px;color:var(--text-dim)">Quick:</span>
+    ${chips}
+  </div>
+  <div id="rt-cat-dropdown" style="margin-top:5px"></div>`;
+  // Restore open dropdown after re-render — works at any drill depth, not just root parents
+  if (_rtOpenCatPid) {
+    _rtCatRenderDropdown(voiceId, _rtOpenCatPid);
+  }
+}
+
+function rtCatChipClick(voiceId, parentTid) {
+  if (_rtOpenCatPid === parentTid && _rtOpenCatPath.length === 0) {
+    _rtOpenCatPid = null;
+    _rtOpenCatPath = [];
+    document.querySelectorAll('.rt-cat-chip').forEach(c => c.classList.remove('open'));
+    const d = document.getElementById('rt-cat-dropdown');
+    if (d) d.innerHTML = '';
+    return;
+  }
+  _rtOpenCatPid = parentTid;
+  _rtOpenCatPath = [];  // reset breadcrumb — chip click always starts from root
+  _rtOpenCatVid = voiceId;
+  document.querySelectorAll('.rt-cat-chip').forEach(c => c.classList.remove('open'));
+  document.getElementById(`rt-cat-${parentTid}`)?.classList.add('open');
+  _rtCatRenderDropdown(voiceId, parentTid);
+}
+
+function _rtCatRenderDropdown(voiceId, parentTid) {
+  const dropEl = document.getElementById('rt-cat-dropdown');
+  if (!dropEl) return;
+  const allTags = allVoiceMeta.tags || {};
+  const parent = allTags[parentTid];
+  if (!parent) { dropEl.innerHTML = ''; return; }
+  const vm = allVoiceMeta.voices?.[voiceId] || {};
+  const vtags = new Set(vm.tags || []);
+  const children = orderedTagEntries().filter(([, t]) => t.parent === parentTid);
+  if (children.length === 0) { dropEl.innerHTML = ''; return; }
+  // Build breadcrumb label if we've drilled down
+  let breadcrumb = '';
+  if (_rtOpenCatPath.length > 0) {
+    const crumbs = _rtOpenCatPath.map(pid => `<span style="color:var(--text-dim);font-size:10px">${escHtml(allTags[pid]?.name || '?')}</span>`).join('<span style="color:var(--text-dim);font-size:10px"> › </span>');
+    breadcrumb = `<div style="display:flex;align-items:center;gap:4px;margin-bottom:4px">
+      <button onclick="rtCatDrillUp('${escAttr(voiceId)}')" style="background:none;border:1px solid var(--border);border-radius:50px;color:var(--text-dim);cursor:pointer;font-size:11px;padding:1px 8px" title="Back">‹ back</button>
+      ${crumbs}<span style="color:var(--text-dim);font-size:10px"> › </span><span style="font-size:10px;color:var(--text)">${escHtml(parent.name)}</span>
+    </div>`;
+  }
+  const opts = children.map(([tid, t]) => {
+    const active = vtags.has(tid);
+    const bg = active
+      ? `background:${escAttr(t.color)};border-color:${escAttr(t.color)};color:#fff`
+      : `border-color:${escAttr(t.color || 'var(--border)')}`;
+    const isAlsoParent = Object.values(allTags).some(x => x.parent === tid);
+    if (isAlsoParent) {
+      // Split: left half toggles assignment, right half drills into children
+      const drillBg = active ? `border-color:${escAttr(t.color)}` : '';
+      return `<span class="rt-cat-drillwrap">
+        <button class="rt-cat-opt${active ? ' active' : ''}" style="${bg}"
+          onclick="rtQuickTagToggle2('${escAttr(voiceId)}','${escAttr(parentTid)}','${escAttr(tid)}')"
+          title="Toggle ${escAttr(t.name)}">${escHtml(t.name)}</button>
+        <button class="rt-cat-drill" style="${drillBg}"
+          onclick="rtCatDrillDown('${escAttr(voiceId)}','${escAttr(tid)}')"
+          title="Show children of ${escAttr(t.name)}">›</button>
+      </span>`;
+    }
+    return `<button class="rt-cat-opt${active ? ' active' : ''}" style="${bg}"
+      onclick="rtQuickTagToggle2('${escAttr(voiceId)}','${escAttr(parentTid)}','${escAttr(tid)}')"
+      >${escHtml(t.name)}</button>`;
+  }).join('');
+  dropEl.innerHTML = `<div style="padding:4px 8px;border-left:3px solid ${escAttr(parent.color || 'var(--accent)')};background:rgba(0,0,0,.18);border-radius:0 4px 4px 0">
+    ${breadcrumb}<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+      <span style="font-size:10px;color:var(--text-dim);white-space:nowrap;margin-right:2px">${escHtml(parent.name)}:</span>
+      ${opts}
+    </div>
+  </div>`;
+}
+
+function rtCatDrillDown(voiceId, childTid) {
+  _rtOpenCatPath.push(_rtOpenCatPid);
+  _rtOpenCatPid = childTid;
+  _rtCatRenderDropdown(voiceId, childTid);
+}
+
+function rtCatDrillUp(voiceId) {
+  if (_rtOpenCatPath.length === 0) return;
+  _rtOpenCatPid = _rtOpenCatPath.pop();
+  _rtCatRenderDropdown(voiceId, _rtOpenCatPid);
+}
+
+async function rtQuickTagToggle2(voiceId, parentTid, tagId) {
+  const vm = allVoiceMeta.voices?.[voiceId] || {};
+  let tags = [...(vm.tags || [])];
+  const idx = tags.indexOf(tagId);
+  if (idx === -1) tags.push(tagId); else tags.splice(idx, 1);
+  try {
+    const r = await fetch(`/v1/voices/${encodeURIComponent(voiceId)}/meta`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tags }),
+    });
+    if (!r.ok) return;
+    if (!allVoiceMeta.voices) allVoiceMeta.voices = {};
+    if (!allVoiceMeta.voices[voiceId]) allVoiceMeta.voices[voiceId] = {};
+    allVoiceMeta.voices[voiceId].tags = tags;
+    renderRtVoiceTags();   // calls renderRtQuickTags → auto-restores dropdown via _rtOpenCatPid
+    populateVoiceSelects(allVoices);
+  } catch (e) { console.error('rtQuickTagToggle2:', e); }
+}
+
+function onRtFilterChange() {
+  const G1 = ['rt-filter-gender-unk','rt-filter-quality-unk','rt-filter-accent-unk'];
+  const G2 = ['rt-filter-male','rt-filter-female','rt-filter-private','rt-filter-best','rt-filter-good'];
+  const g1any = G1.some(id => document.getElementById(id)?.checked);
+  const g2any = G2.some(id => document.getElementById(id)?.checked);
+  G1.forEach(id => document.getElementById(id)?.closest('label')?.classList.toggle('filter-check-disabled', g2any));
+  G2.forEach(id => document.getElementById(id)?.closest('label')?.classList.toggle('filter-check-disabled', g1any));
+  filterRtVoiceSelect();
+}
+
+function filterRtVoiceSelect() {
+  const G1 = ['rt-filter-gender-unk','rt-filter-quality-unk','rt-filter-accent-unk'];
+  const G2 = ['rt-filter-male','rt-filter-female','rt-filter-private','rt-filter-best','rt-filter-good'];
+  const g1any = G1.some(id => document.getElementById(id)?.checked);
+  const g2any = G2.some(id => document.getElementById(id)?.checked);
+
+  function _tidByName(name) {
+    for (const [tid, t] of Object.entries(allVoiceMeta.tags || {})) { if (t.name === name) return tid; }
+    return null;
+  }
+
+  let voices = (allVoices || []).filter(v => !(allVoiceMeta.voices?.[v.id] || {}).hidden);
+
+  if (g1any) {
+    // Additive OR: show voices matching any checked undetermined condition
+    const gunkOn   = document.getElementById('rt-filter-gender-unk')?.checked;
+    const qunkOn   = document.getElementById('rt-filter-quality-unk')?.checked;
+    const aunkOn   = document.getElementById('rt-filter-accent-unk')?.checked;
+    const unknownTid    = _tidByName('unknown');
+    const accentUnclTid = _tidByName('accent-unclassified');
+    const qualityPid    = _tidByName('quality');
+    const qualityChildIds = qualityPid
+      ? new Set(Object.entries(allVoiceMeta.tags || {}).filter(([, t]) => t.parent === qualityPid).map(([id]) => id))
+      : new Set();
+    voices = voices.filter(v => {
+      const vtags = new Set(allVoiceMeta.voices?.[v.id]?.tags || []);
+      if (gunkOn && unknownTid    && vtags.has(unknownTid))    return true;
+      if (aunkOn && accentUnclTid && vtags.has(accentUnclTid)) return true;
+      if (qunkOn && qualityChildIds.size > 0 && ![...qualityChildIds].some(id => vtags.has(id))) return true;
+      return false;
+    });
+  } else if (g2any) {
+    // Subtractive AND: voice must have ALL selected tags
+    const checks = [
+      ['rt-filter-male',    'male'],
+      ['rt-filter-female',  'female'],
+      ['rt-filter-private', 'private'],
+      ['rt-filter-best',    'best'],
+      ['rt-filter-good',    'good'],
+    ];
+    const requiredTids = checks
+      .filter(([id]) => document.getElementById(id)?.checked)
+      .map(([, name]) => _tidByName(name))
+      .filter(Boolean);
+    voices = voices.filter(v => {
+      const vtags = new Set(allVoiceMeta.voices?.[v.id]?.tags || []);
+      return requiredTids.every(tid => vtags.has(tid));
+    });
+  }
+  // Re-build just the rt-voice select keeping current selection if still valid
+  const sel = document.getElementById('rt-voice');
+  if (!sel) return;
+  const prev = sel.value;
+  const GENDER_PRIORITY = ['male','female','unknown'];
+  const SOURCE_PRIORITY = ['built-in','community','private'];
+  const GENDER_ICON = { male: '♂', female: '♀', unknown: '?' };
+  const groups = {};
+  for (const v of voices) {
+    const vtags = new Set((allVoiceMeta.voices?.[v.id]?.tags || []).map(tid => allVoiceMeta.tags?.[tid]?.name).filter(Boolean));
+    const gLabel = GENDER_PRIORITY.find(g => vtags.has(g)) || '';
+    const sLabel = SOURCE_PRIORITY.find(s => vtags.has(s)) || '';
+    const key = `${gLabel}||${sLabel}`;
+    if (!groups[key]) groups[key] = { gLabel, sLabel, voices: [] };
+    groups[key].voices.push(v);
+  }
+  const gIdx = n => n ? GENDER_PRIORITY.indexOf(n) : 999;
+  const sIdx = n => n ? SOURCE_PRIORITY.indexOf(n) : 999;
+  const sortedKeys = Object.keys(groups).sort((a, b) => {
+    const [ga, sa] = a.split('||'), [gb, sb] = b.split('||');
+    return gIdx(ga) - gIdx(gb) || sIdx(sa) - sIdx(sb);
+  });
+  let html = '';
+  for (const key of sortedKeys) {
+    const { gLabel, sLabel, voices: gv } = groups[key];
+    const g = gLabel ? `${GENDER_ICON[gLabel] || ''} ${gLabel}` : '—';
+    const label = `${g} / ${sLabel || '—'} (${gv.length})`;
+    html += `<optgroup label="${escAttr(label)}">${gv.map(v => `<option value="${escAttr(v.id)}">${escHtml(v.name)}</option>`).join('')}</optgroup>`;
+  }
+  sel.innerHTML = html || '<option value="">No matching voices</option>';
+  sel.value = prev;
+  if (!sel.value && voices.length) sel.value = voices[0].id;
+  renderRtVoiceTags();
 }
 
 async function testVoice(voiceId, voiceName) {
@@ -1120,6 +1551,7 @@ const RT_WAV_HEADER_BYTES = 44;
 let rtAbortCtrl = null;
 let rtAudioCtx = null;
 let rtStopped = false;
+let rtIsPlaying = false;  // guards Start button state across re-renders
 
 function logRT(msg, cls = 'info') {
   const log = document.getElementById('rt-log');
@@ -1151,6 +1583,7 @@ async function runRealtime() {
   if (rtAudioCtx.state === 'suspended') await rtAudioCtx.resume();
 
   badge.className = 'badge green'; badge.textContent = 'streaming';
+  rtIsPlaying = true;
   startBtn.disabled = true; stopBtn.disabled = false;
   logRT(`Connecting — POST /v1/audio/speech stream:true voice:${voice}`);
 
@@ -1246,6 +1679,7 @@ async function runRealtime() {
       badge.className = 'badge red'; badge.textContent = 'error';
     }
   } finally {
+    rtIsPlaying = false;
     startBtn.disabled = false; stopBtn.disabled = true;
     if (rtStopped) { badge.className = 'badge grey'; badge.textContent = 'stopped'; }
   }
@@ -1253,6 +1687,7 @@ async function runRealtime() {
 
 function stopRealtime() {
   rtStopped = true;
+  rtIsPlaying = false;
   if (rtAbortCtrl) { rtAbortCtrl.abort(); rtAbortCtrl = null; }
   if (rtAudioCtx) { rtAudioCtx.close(); rtAudioCtx = null; }
   document.getElementById('rt-btn').disabled = false;
@@ -1402,10 +1837,18 @@ function renderTagFilterOptions() {
   const sel = document.getElementById('tag-filter-select');
   if (!sel) return;
   const current = sel.value;
-  const tags = Object.entries(allVoiceMeta.tags || {})
-    .sort((a, b) => a[1].name.localeCompare(b[1].name));
+  const tags = orderedTagEntries();
   sel.innerHTML = `<option value="">All tags</option>` +
-    tags.map(([id, t]) => `<option value="${escAttr(id)}"${id===current?' selected':''}>${escHtml(t.name)}</option>`).join('');
+    tags.map(([id, t]) => {
+      const indent = t.parent ? '\u00a0\u00a0' : '';
+      return `<option value="${escAttr(id)}"${id===current?' selected':''}>${indent}${escHtml(t.name)}</option>`;
+    }).join('');
+}
+
+function orderedTagEntries() {
+  const order = allVoiceMeta.tag_order || [];
+  const oi = id => { const i = order.indexOf(id); return i === -1 ? 9999 : i; };
+  return Object.entries(allVoiceMeta.tags || {}).sort((a, b) => oi(a[0]) - oi(b[0]));
 }
 
 function setTagFilter(tagId) {
@@ -1625,8 +2068,14 @@ function repopulateTagParentSelect(tags) {
   const sel = document.getElementById('new-tag-parent');
   if (!sel) return;
   const current = sel.value;
+  const order = allVoiceMeta.tag_order || [];
+  const oi = id => { const i = order.indexOf(id); return i === -1 ? 9999 : i; };
+  const sorted = [...tags].sort((a, b) => oi(a.id) - oi(b.id));
   sel.innerHTML = `<option value="">— None —</option>` +
-    tags.map(t => `<option value="${escAttr(t.id)}"${t.id===current?' selected':''}>${escHtml(t.name)}</option>`).join('');
+    sorted.map(t => {
+      const indent = (allVoiceMeta.tags[t.id]?.parent || t.parent) ? '\u00a0\u00a0' : '';
+      return `<option value="${escAttr(t.id)}"${t.id===current?' selected':''}>${indent}${escHtml(t.name)}</option>`;
+    }).join('');
 }
 
 async function loadTags() {
@@ -1654,9 +2103,19 @@ function renderTagsList(tags) {
     container.innerHTML = `<div style="color:var(--text-dim);font-size:13px">No tags yet — create one to the left.</div>`;
     return;
   }
-  container.innerHTML = tags.map(t => {
-    const parentName = t.parent && (allVoiceMeta.tags[t.parent]?.name || t.parent);
-    return `<div class="tag-row" id="tagrow-${escAttr(t.id)}">
+  // Apply stored order
+  const order = allVoiceMeta.tag_order || [];
+  const orderIdx = id => { const i = order.indexOf(id); return i === -1 ? 9999 : i; };
+  const sorted = [...tags].sort((a, b) => orderIdx(a.id) - orderIdx(b.id));
+
+  container.innerHTML = sorted.map(t => {
+    const isChild = !!t.parent;
+    return `<div class="tag-row${isChild ? ' child-tag' : ''}" id="tagrow-${escAttr(t.id)}" draggable="true" data-tid="${escAttr(t.id)}"
+      ondragstart="tagDragStart(event,'${escAttr(t.id)}')"
+      ondragover="tagDragOver(event)"
+      ondragleave="tagDragLeave(event)"
+      ondrop="tagDrop(event,'${escAttr(t.id)}')">
+      <span class="tag-drag-handle" title="Drag to reorder">⠿</span>
       <input type="color" class="tag-color-input" value="${escAttr(t.color)}"
              oninput="saveTagColor('${escAttr(t.id)}',this.value)" title="Pick colour">
       <span class="voice-tag-pill" id="tagpill-${escAttr(t.id)}" style="background:${escAttr(t.color)}">${escHtml(t.name)}</span>
@@ -1665,10 +2124,104 @@ function renderTagsList(tags) {
              onkeydown="if(event.key==='Enter')this.blur()"
              title="Click to rename">
       <span style="font-size:12px;color:var(--text-dim);white-space:nowrap">${t.voice_count} voice${t.voice_count !== 1 ? 's' : ''}</span>
-      ${parentName ? `<span style="font-size:11px;color:var(--text-dim)">↳ ${escHtml(parentName)}</span>` : ''}
+      ${isChild ? `<span style="font-size:11px;color:var(--text-dim);white-space:nowrap;display:inline-flex;align-items:center;gap:3px">\u21b3 ${escHtml(allVoiceMeta.tags[t.parent]?.name || '?')}<button onclick="clearTagParent('${escAttr(t.id)}')" title="Clear parent" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:11px;padding:0;line-height:1">\u00d7</button></span>` : ''}
       <button class="btn small danger" onclick="deleteTagById('${escAttr(t.id)}')" title="Delete tag and unassign from all voices">✕</button>
     </div>`;
   }).join('');
+}
+
+let _dragTagId = null;
+let _dragIntent = 'reorder';  // 'reorder' | 'reparent'
+function tagDragStart(e, tid) {
+  _dragTagId = tid;
+  _dragIntent = 'reorder';
+  e.dataTransfer.effectAllowed = 'move';
+  const row = document.getElementById(`tagrow-${tid}`);
+  if (row) row.classList.add('dragging');
+}
+function tagDragOver(e) {
+  e.preventDefault();
+  const row = e.currentTarget;
+  if (!row || row.dataset.tid === _dragTagId) return;
+  // Top third = reorder (insert before), lower two thirds = reparent
+  const isReparent = e.offsetY >= row.offsetHeight / 3;
+  if (isReparent) {
+    row.classList.remove('drag-over');
+    row.classList.add('drag-reparent');
+    e.dataTransfer.dropEffect = 'link';
+    _dragIntent = 'reparent';
+  } else {
+    row.classList.remove('drag-reparent');
+    row.classList.add('drag-over');
+    e.dataTransfer.dropEffect = 'move';
+    _dragIntent = 'reorder';
+  }
+}
+function tagDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over');
+  e.currentTarget.classList.remove('drag-reparent');
+}
+function tagDrop(e, targetTid) {
+  e.preventDefault();
+  const row = e.currentTarget;
+  row.classList.remove('drag-over');
+  row.classList.remove('drag-reparent');
+  if (!_dragTagId || _dragTagId === targetTid) { _dragTagId = null; return; }
+  if (_dragIntent === 'reparent') {
+    const tid = _dragTagId;
+    _dragTagId = null;
+    reparentTag(tid, targetTid);
+    return;
+  }
+  // Reorder
+  const allIds = Object.keys(allVoiceMeta.tags || {});
+  const order = [...(allVoiceMeta.tag_order || [])];
+  for (const id of allIds) { if (!order.includes(id)) order.push(id); }
+  const fromIdx = order.indexOf(_dragTagId);
+  const toIdx   = order.indexOf(targetTid);
+  if (fromIdx === -1 || toIdx === -1) { _dragTagId = null; return; }
+  order.splice(fromIdx, 1);
+  order.splice(toIdx, 0, _dragTagId);
+  allVoiceMeta.tag_order = order;
+  _dragTagId = null;
+  const curTags = Object.entries(allVoiceMeta.tags).map(([id, t]) => ({
+    id, name: t.name, color: t.color, parent: t.parent,
+    voice_count: Object.values(allVoiceMeta.voices || {}).filter(v => (v.tags || []).includes(id)).length
+  }));
+  renderTagsList(curTags);
+  saveTagOrder(order);
+}
+async function reparentTag(childTid, parentTid) {
+  try {
+    const r = await fetch(`${API}/v1/tags/${encodeURIComponent(childTid)}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parent: parentTid }),
+    });
+    if (r.ok) {
+      if (allVoiceMeta.tags[childTid]) allVoiceMeta.tags[childTid].parent = parentTid;
+      loadTags();
+    }
+  } catch (err) { console.error('reparentTag:', err); }
+}
+async function clearTagParent(childTid) {
+  try {
+    const r = await fetch(`${API}/v1/tags/${encodeURIComponent(childTid)}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parent: null }),
+    });
+    if (r.ok) {
+      if (allVoiceMeta.tags[childTid]) allVoiceMeta.tags[childTid].parent = null;
+      loadTags();
+    }
+  } catch (err) { console.error('clearTagParent:', err); }
+}
+async function saveTagOrder(order) {
+  try {
+    await fetch(`${API}/v1/tags/order`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ order }),
+    });
+  } catch (e) { console.warn('saveTagOrder:', e); }
 }
 
 async function createNewTag() {
@@ -1759,8 +2312,334 @@ async function deleteTagById(tagId) {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// Test Texts
+// ══════════════════════════════════════════════════════════════════
+
+async function loadTestTexts() {
+  try {
+    const r = await fetch(`${API}/v1/test-texts`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    allTestTexts = data.data || [];
+    renderTextsList();
+    populateTtTagFilter();
+    renderSavedTextButtons();
+  } catch (e) { console.error('loadTestTexts:', e); }
+}
+
+function renderTextsList() {
+  const el = document.getElementById('tt-list');
+  if (!el) return;
+  if (allTestTexts.length === 0) {
+    el.innerHTML = '<div style="color:var(--text-dim);font-size:13px">No saved texts yet. Use the form above to add one.</div>';
+    return;
+  }
+  el.innerHTML = allTestTexts.map(t => {
+    const tagPills = (t.tags || []).map(tag =>
+      `<span style="display:inline-block;background:var(--border);border-radius:50px;padding:1px 8px;font-size:11px;margin-right:3px">${escHtml(tag)}</span>`
+    ).join('');
+    return `<div class="card" style="margin-bottom:10px" id="tt-item-${escAttr(t.id)}">
+      <div style="display:flex;align-items:flex-start;gap:8px;justify-content:space-between;flex-wrap:wrap">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;margin-bottom:4px">
+            ${escHtml(t.label)}
+            <span style="color:var(--text-dim);font-size:11px;font-weight:400"> — ${t.word_count} words</span>
+          </div>
+          <div style="margin-bottom:5px">${tagPills}</div>
+          <div style="color:var(--text-dim);font-size:12px;font-style:italic;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${escHtml(t.preview)}…</div>
+        </div>
+        <div class="flex-gap" style="gap:5px;flex-shrink:0;align-items:flex-start;padding-top:2px">
+          <button class="btn small" onclick="loadTestTextIntoPage('${escAttr(t.id)}')" title="Load into Test Page">📋 Load</button>
+          <button class="btn small secondary" onclick="startEditTestText('${escAttr(t.id)}')" title="Edit">✏ Edit</button>
+          <button class="btn small danger" onclick="deleteTestText('${escAttr(t.id)}')" title="Delete">🗑</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function populateTtTagFilter() {
+  const sel = document.getElementById('tt-tag-filter');
+  if (!sel) return;
+  const allTags = [...new Set(allTestTexts.flatMap(t => t.tags || []))].sort();
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">All</option>' +
+    allTags.map(tag => `<option value="${escAttr(tag)}">${escHtml(tag)}</option>`).join('');
+  if (allTags.includes(prev)) sel.value = prev;
+}
+
+function renderSavedTextButtons() {
+  const container = document.getElementById('saved-text-buttons');
+  if (!container) return;
+  const filter = document.getElementById('tt-tag-filter')?.value || '';
+  const filtered = filter
+    ? allTestTexts.filter(t => (t.tags || []).includes(filter))
+    : allTestTexts;
+  if (filtered.length === 0) {
+    container.innerHTML = `<span style="color:var(--text-dim);font-size:12px">${
+      allTestTexts.length === 0 ? 'No saved texts yet' : 'No texts match this tag'
+    }</span>`;
+    return;
+  }
+  container.innerHTML = filtered.map(t =>
+    `<button class="btn secondary small" onclick="loadTestTextIntoPage('${escAttr(t.id)}')" title="${escAttr((t.preview || '').substring(0, 120))}">${escHtml(t.label)}</button>`
+  ).join('');
+}
+
+async function loadTestTextIntoPage(id) {
+  try {
+    const r = await fetch(`${API}/v1/test-texts/${encodeURIComponent(id)}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const t = await r.json();
+    ['batch-text', 'rt-text', 'stream-text'].forEach(elId => {
+      const el = document.getElementById(elId);
+      if (el) el.value = t.text;
+    });
+    // Switch to Test Page if not already there
+    const testBtn = document.querySelector('[data-tab="test"]');
+    if (testBtn && !document.getElementById('tab-test').classList.contains('active')) {
+      testBtn.click();
+    }
+  } catch (e) { console.error('loadTestTextIntoPage:', e); alert('Failed to load text.'); }
+}
+
+async function saveTestText() {
+  const label = (document.getElementById('tt-label').value || '').trim();
+  const text = (document.getElementById('tt-text').value || '').trim();
+  const tagsRaw = document.getElementById('tt-tags').value || '';
+  const tags = tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
+  const editId = document.getElementById('tt-edit-id').value;
+  const statusEl = document.getElementById('tt-form-status');
+
+  if (!label || !text) {
+    statusEl.textContent = 'Label and text are required.';
+    statusEl.style.color = 'var(--danger, #f87171)';
+    return;
+  }
+  statusEl.textContent = 'Saving…';
+  statusEl.style.color = 'var(--text-dim)';
+
+  try {
+    let r;
+    if (editId) {
+      r = await fetch(`${API}/v1/test-texts/${encodeURIComponent(editId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label, text, tags }),
+      });
+    } else {
+      r = await fetch(`${API}/v1/test-texts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label, text, tags }),
+      });
+    }
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    statusEl.textContent = editId ? 'Updated!' : 'Saved!';
+    statusEl.style.color = 'var(--success, #3dd68c)';
+    setTimeout(() => { statusEl.textContent = ''; }, 2500);
+    cancelEditTestText();
+    await loadTestTexts();
+  } catch (e) {
+    statusEl.textContent = `Error: ${e.message}`;
+    statusEl.style.color = 'var(--danger, #f87171)';
+  }
+}
+
+function startEditTestText(id) {
+  fetch(`${API}/v1/test-texts/${encodeURIComponent(id)}`)
+    .then(r => r.json())
+    .then(full => {
+      document.getElementById('tt-edit-id').value = id;
+      document.getElementById('tt-label').value = full.label;
+      document.getElementById('tt-tags').value = (full.tags || []).join(', ');
+      document.getElementById('tt-text').value = full.text;
+      document.getElementById('tt-form-title').textContent = 'Edit Text';
+      document.getElementById('tt-cancel-btn').style.display = '';
+      document.getElementById('tt-form-card').scrollIntoView({ behavior: 'smooth' });
+    })
+    .catch(e => alert(`Failed to load text: ${e.message}`));
+}
+
+function cancelEditTestText() {
+  document.getElementById('tt-edit-id').value = '';
+  document.getElementById('tt-label').value = '';
+  document.getElementById('tt-tags').value = '';
+  document.getElementById('tt-text').value = '';
+  document.getElementById('tt-form-title').textContent = 'New Text';
+  document.getElementById('tt-cancel-btn').style.display = 'none';
+  document.getElementById('tt-form-status').textContent = '';
+}
+
+async function deleteTestText(id) {
+  const t = allTestTexts.find(x => x.id === id);
+  if (!confirm(`Delete "${t?.label || id}"?\nThis cannot be undone.`)) return;
+  try {
+    const r = await fetch(`${API}/v1/test-texts/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    await loadTestTexts();
+  } catch (e) { alert(`Error: ${e.message}`); }
+}
+
+// ══════════════════════════════════════════════════════════════════
 // Init
 // ══════════════════════════════════════════════════════════════════
+// ── Matrix tab ─────────────────────────────────────────────────────────────
+let matrixSortCol = null;   // tagId of the column currently sorted, or null = sort by voice name
+let matrixSortDir = 1;      // 1 = ascending, -1 = descending
+
+// Ordered column list: gender group → source group → other tags (parent first, children after)
+function getMatrixColumns() {
+  const GENDER_PRIORITY = ['male', 'female', 'unknown'];
+  const SOURCE_PRIORITY = ['built-in', 'community', 'private'];
+
+  function tidFor(name) {
+    for (const [tid, t] of Object.entries(allVoiceMeta.tags || {})) {
+      if (t.name === name) return tid;
+    }
+    return null;
+  }
+
+  const cols = [];
+  const seen = new Set();
+
+  const addTag = (name, group) => {
+    const tid = tidFor(name);
+    if (tid && !seen.has(tid)) { cols.push({ tid, name, group }); seen.add(tid); }
+  };
+
+  GENDER_PRIORITY.forEach(n => addTag(n, 'gender'));
+  SOURCE_PRIORITY.forEach(n => addTag(n, 'source'));
+
+  // Remaining tags: parents first, children after parent, alpha within
+  const allTags = allVoiceMeta.tags || {};
+  const parents = Object.entries(allTags)
+    .filter(([tid, t]) => !seen.has(tid) && !t.parent_id)
+    .sort(([, a], [, b]) => a.name.localeCompare(b.name));
+
+  for (const [ptid, pt] of parents) {
+    seen.add(ptid);
+    cols.push({ tid: ptid, name: pt.name, group: 'other' });
+    const children = Object.entries(allTags)
+      .filter(([ctid, ct]) => !seen.has(ctid) && ct.parent_id === ptid)
+      .sort(([, a], [, b]) => a.name.localeCompare(b.name));
+    for (const [ctid, ct] of children) {
+      seen.add(ctid);
+      cols.push({ tid: ctid, name: ct.name, group: 'other' });
+    }
+  }
+
+  // Any remaining (children whose parent wasn't in list yet — shouldn't happen but be safe)
+  for (const [tid, t] of Object.entries(allTags)) {
+    if (!seen.has(tid)) cols.push({ tid, name: t.name, group: 'other' });
+  }
+
+  return cols;
+}
+
+function renderMatrix() {
+  const container = document.getElementById('matrix-container');
+  if (!container) return;
+
+  const filterEl = document.getElementById('matrix-filter');
+  const showHiddenEl = document.getElementById('matrix-show-hidden');
+  const filterText = (filterEl?.value || '').trim().toLowerCase();
+  const showHidden = showHiddenEl?.checked || false;
+
+  const cols = getMatrixColumns();
+
+  // Filter voices
+  let rows = (allVoices || []).filter(v => {
+    if (!showHidden && (allVoiceMeta.voices?.[v.id] || {}).hidden) return false;
+    if (filterText && !v.name.toLowerCase().includes(filterText)) return false;
+    return true;
+  });
+
+  // Sort
+  if (matrixSortCol === null) {
+    rows.sort((a, b) => matrixSortDir * a.name.localeCompare(b.name));
+  } else {
+    rows.sort((a, b) => {
+      const ha = (allVoiceMeta.voices?.[a.id]?.tags || []).includes(matrixSortCol);
+      const hb = (allVoiceMeta.voices?.[b.id]?.tags || []).includes(matrixSortCol);
+      // sorted: checked first when ascending
+      if (ha !== hb) return matrixSortDir * (hb - ha);
+      return a.name.localeCompare(b.name);
+    });
+  }
+
+  const infoEl = document.getElementById('matrix-info');
+  if (infoEl) infoEl.textContent = `${rows.length} voices · ${cols.length} tags`;
+
+  // Build table
+  let prevGroup = null;
+  let headerCells = `<th class="col-name" style="cursor:pointer" onclick="matrixSortByCol(null)">Voice${matrixSortCol === null ? (matrixSortDir === 1 ? ' ▲' : ' ▼') : ''}</th>`;
+  for (const col of cols) {
+    const isSep = prevGroup !== null && col.group !== prevGroup;
+    const sepClass = isSep ? ' grp-sep' : '';
+    prevGroup = col.group;
+    const sortMark = matrixSortCol === col.tid ? (matrixSortDir === 1 ? ' ▲' : ' ▼') : '';
+    headerCells += `<th class="col-label${sepClass}" onclick="matrixSortByCol('${col.tid}')" title="${escAttr(col.name)}">${escHtml(col.name)}${sortMark}</th>`;
+  }
+
+  let bodyRows = '';
+  for (const v of rows) {
+    const vm = allVoiceMeta.voices?.[v.id] || {};
+    const vtags = new Set(vm.tags || []);
+    const isHidden = vm.hidden || false;
+    const rowClass = isHidden ? ' class="row-hidden"' : '';
+    let tds = `<td class="col-name">${escHtml(v.name)}</td>`;
+    prevGroup = null;
+    for (const col of cols) {
+      const isSep = prevGroup !== null && col.group !== prevGroup;
+      const sepClass = isSep ? ' grp-sep' : '';
+      prevGroup = col.group;
+      const checked = vtags.has(col.tid) ? ' checked' : '';
+      tds += `<td class="col-check${sepClass}"><input type="checkbox"${checked} onchange="matrixToggleTag('${escAttr(v.id)}','${col.tid}',this)"></td>`;
+    }
+    bodyRows += `<tr${rowClass}>${tds}</tr>`;
+  }
+
+  container.innerHTML = `<table class="matrix-table"><thead><tr>${headerCells}</tr></thead><tbody>${bodyRows}</tbody></table>`;
+}
+
+function matrixSortByCol(colTid) {
+  if (matrixSortCol === colTid) {
+    matrixSortDir *= -1;
+  } else {
+    matrixSortCol = colTid;
+    matrixSortDir = 1;
+  }
+  renderMatrix();
+}
+
+async function matrixToggleTag(voiceId, tagId, checkbox) {
+  const vm = allVoiceMeta.voices?.[voiceId] || {};
+  const tags = [...(vm.tags || [])];
+  const idx = tags.indexOf(tagId);
+  if (checkbox.checked && idx === -1) tags.push(tagId);
+  else if (!checkbox.checked && idx !== -1) tags.splice(idx, 1);
+  else return;  // no change
+
+  try {
+    const resp = await fetch(`/v1/voices/${encodeURIComponent(voiceId)}/meta`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tags })
+    });
+    if (!resp.ok) { checkbox.checked = !checkbox.checked; return; }
+    // Update local state
+    if (!allVoiceMeta.voices) allVoiceMeta.voices = {};
+    if (!allVoiceMeta.voices[voiceId]) allVoiceMeta.voices[voiceId] = {};
+    allVoiceMeta.voices[voiceId].tags = tags;
+    // Refresh dropdowns (non-disruptive)
+    populateVoiceSelects(allVoices);
+  } catch (e) {
+    checkbox.checked = !checkbox.checked;
+  }
+}
+// ── End Matrix ──────────────────────────────────────────────────────────────
+
 window.addEventListener('DOMContentLoaded', init);
 </script>
 </body>
