@@ -8,6 +8,7 @@
 <style>
   :root {
     --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a; --border: #2e3250;
+    --card-bg: #1a1d27;
     --accent: #5c6ef8; --accent-dim: #3a4acc; --green: #22c55e; --red: #ef4444;
     --yellow: #f59e0b; --text: #e2e8f0; --text-dim: #8892a8;
     --font: 'Inter', system-ui, -apple-system, sans-serif;
@@ -155,8 +156,8 @@
   .matrix-wrap { overflow: auto; max-height: calc(100vh - 200px); }
   .matrix-table { border-collapse: collapse; font-size: 11px; white-space: nowrap; }
   .matrix-table th, .matrix-table td { border: 1px solid var(--border); padding: 3px 5px; text-align: center; }
-  .matrix-table th { background: var(--card-bg); cursor: pointer; user-select: none; position: sticky; top: 0; z-index: 2; }
-  .matrix-table th.col-label { writing-mode: vertical-rl; text-orientation: mixed; min-height: 90px; vertical-align: bottom; padding: 6px 3px; font-weight: 400; }
+  .matrix-table th { background: var(--card-bg); cursor: pointer; user-select: none; position: sticky; top: 0; z-index: 2; box-shadow: 0 2px 0 var(--border); }
+  .matrix-table th.col-label { writing-mode: vertical-rl; text-orientation: mixed; min-height: 90px; vertical-align: bottom; padding: 6px 3px; font-weight: 400; border-bottom: 3px solid var(--col-color, var(--border)); }
   .matrix-table th.col-name { writing-mode: horizontal-tb; text-align: left; min-width: 160px; font-weight: 600; position: sticky; left: 0; z-index: 3; }
   .matrix-table td.col-name { text-align: left; position: sticky; left: 0; background: var(--bg); z-index: 1; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
   .matrix-table th.grp-sep, .matrix-table td.grp-sep { border-left: 2px solid var(--accent); }
@@ -573,12 +574,26 @@ with client.audio.speech.with_streaming_response.create(
     </div>
 
     <div class="card card-full">
-      <div class="card-title">Streaming Info</div>
-      <div class="info-box">
-        <strong style="color:var(--text)">Streaming endpoint:</strong> <code>POST /v1/audio/speech</code> with <code>"stream": true</code><br><br>
-        When streaming is enabled, the response is a chunked Transfer-Encoding HTTP stream in WAV or raw PCM format. The model generates audio incrementally — the first chunk arrives within ~200ms and the response continues until synthesis is complete.<br><br>
-        <strong style="color:var(--text)">Monitor note:</strong> This service does not expose a <code>/v1/monitor/stream</code> SSE endpoint. Use container logs for real-time inference output:<br>
-        <code>pct exec 841 -- docker logs -f pockettts-openai-tts</code>
+      <div class="card-title" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        Recent Requests
+        <span id="mon-sse-badge" style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:10px;background:#1e2030;color:var(--text-dim)">○ disconnected</span>
+        <button class="btn secondary small" style="margin-left:auto;font-size:11px;padding:3px 10px" onclick="clearMonitorLog()">Clear</button>
+      </div>
+      <div id="mon-feed-empty" style="color:var(--text-dim);font-size:13px;padding:8px 0">No requests recorded yet — make a TTS request to see it here.</div>
+      <div style="overflow-x:auto">
+        <table id="mon-feed-table" style="display:none;width:100%;border-collapse:collapse;font-size:12px">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:5px 10px;font-size:11px;font-weight:500;color:var(--text-dim);border-bottom:1px solid var(--border);white-space:nowrap">Time</th>
+              <th style="text-align:left;padding:5px 10px;font-size:11px;font-weight:500;color:var(--text-dim);border-bottom:1px solid var(--border);white-space:nowrap">Voice</th>
+              <th style="text-align:left;padding:5px 10px;font-size:11px;font-weight:500;color:var(--text-dim);border-bottom:1px solid var(--border)">Text</th>
+              <th style="text-align:left;padding:5px 10px;font-size:11px;font-weight:500;color:var(--text-dim);border-bottom:1px solid var(--border);white-space:nowrap" title="Time to first audio byte (batch: generation time; stream: first chunk)">TTFA</th>
+              <th style="text-align:left;padding:5px 10px;font-size:11px;font-weight:500;color:var(--text-dim);border-bottom:1px solid var(--border);white-space:nowrap">Duration</th>
+              <th style="text-align:left;padding:5px 10px;font-size:11px;font-weight:500;color:var(--text-dim);border-bottom:1px solid var(--border);white-space:nowrap">Mode</th>
+            </tr>
+          </thead>
+          <tbody id="mon-feed-tbody"></tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -881,10 +896,102 @@ async function refreshHealth() {
   }
 }
 
+// ─────────────────────────────────── Request Log (SSE) ───
+let _monitorES = null;
+let _monitorRows = [];
+const MON_MAX_ROWS = 100;
+
+function _escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function connectMonitorSSE() {
+  if (_monitorES) return;
+  const badge = document.getElementById('mon-sse-badge');
+  if (badge) { badge.textContent = '◌ connecting…'; badge.style.color = 'var(--yellow)'; badge.style.background = '#2a2208'; }
+  _monitorES = new EventSource(`${API}/v1/monitor/stream`);
+  _monitorES.onopen = () => {
+    if (badge) { badge.textContent = '● connected'; badge.style.color = 'var(--green)'; badge.style.background = '#14532d'; }
+  };
+  _monitorES.onmessage = (e) => {
+    try {
+      const evt = JSON.parse(e.data);
+      _monitorRows.unshift(evt); // newest first
+      if (_monitorRows.length > MON_MAX_ROWS) _monitorRows.length = MON_MAX_ROWS;
+      renderMonitorTable();
+    } catch (_) {}
+  };
+  _monitorES.onerror = () => {
+    _monitorES.close();
+    _monitorES = null;
+    if (badge) { badge.textContent = '○ not available'; badge.style.color = 'var(--text-dim)'; badge.style.background = '#1e2030'; }
+    // Retry in 10s
+    setTimeout(connectMonitorSSE, 10000);
+  };
+}
+
+function disconnectMonitorSSE() {
+  if (_monitorES) { _monitorES.close(); _monitorES = null; }
+}
+
+async function clearMonitorLog() {
+  _monitorRows = [];
+  renderMonitorTable();
+  try { await fetch(`${API}/v1/monitor/events`, { method: 'DELETE' }); } catch (_) {}
+}
+
+function renderMonitorTable() {
+  const tbody = document.getElementById('mon-feed-tbody');
+  const empty = document.getElementById('mon-feed-empty');
+  const table = document.getElementById('mon-feed-table');
+  if (!tbody) return;
+  if (!_monitorRows.length) {
+    empty.style.display = 'block';
+    table.style.display = 'none';
+    return;
+  }
+  empty.style.display = 'none';
+  table.style.display = 'table';
+  tbody.innerHTML = _monitorRows.map((r, i) => {
+    const t = new Date((r.ts || 0) * 1000);
+    const timeStr = t.toLocaleTimeString();
+    const voice = _escHtml(r.voice || '—');
+    const preview = (r.text_preview || '').substring(0, 80);
+    const hasMore = r.text_full && r.text_full.length > 80;
+    const textCell = hasMore
+      ? `<span class="mon-text-toggle" onclick="monToggleText(this,${i})" style="cursor:pointer">${_escHtml(preview)}<span style="color:var(--text-dim)">…</span> <span style="color:var(--accent);font-size:10px">▾</span></span><span class="mon-text-full" style="display:none;color:var(--text-dim)">${_escHtml(r.text_full)}</span>`
+      : _escHtml(preview || r.text_full || '—');
+    const ttfa = r.ttfa != null ? `${r.ttfa}s` : '—';
+    const ttfaColor = r.ttfa == null ? 'var(--text-dim)' : r.ttfa < 1 ? 'var(--green)' : r.ttfa < 3 ? 'var(--text)' : 'var(--yellow)';
+    const dur = r.audio_duration != null ? `${r.audio_duration}s` : '—';
+    const modeBadge = r.mode === 'stream'
+      ? `<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:#1a2050;color:var(--accent)">stream</span>`
+      : `<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:#1e2030;color:var(--text-dim)">batch</span>`;
+    return `<tr>
+      <td style="padding:5px 10px;border-bottom:1px solid var(--border);white-space:nowrap;color:var(--text-dim);font-family:var(--mono)">${timeStr}</td>
+      <td style="padding:5px 10px;border-bottom:1px solid var(--border);white-space:nowrap;font-family:var(--mono)">${voice}</td>
+      <td style="padding:5px 10px;border-bottom:1px solid var(--border);max-width:360px;word-break:break-word">${textCell}</td>
+      <td style="padding:5px 10px;border-bottom:1px solid var(--border);white-space:nowrap;color:${ttfaColor};font-family:var(--mono)">${ttfa}</td>
+      <td style="padding:5px 10px;border-bottom:1px solid var(--border);white-space:nowrap;font-family:var(--mono)">${dur}</td>
+      <td style="padding:5px 10px;border-bottom:1px solid var(--border)">${modeBadge}</td>
+    </tr>`;
+  }).join('');
+}
+
+function monToggleText(el, idx) {
+  const fullEl = el.nextElementSibling;
+  if (!fullEl) return;
+  const open = fullEl.style.display !== 'none';
+  fullEl.style.display = open ? 'none' : 'inline';
+  const arrow = el.querySelector('span:last-child');
+  if (arrow) arrow.textContent = open ? '▾' : '▴';
+  el.style.display = open ? 'inline' : 'none';
+}
+
 // Auto-refresh monitor when tab is active
 document.querySelectorAll('#tab-nav button').forEach(btn => {
   btn.addEventListener('click', () => {
-    if (btn.dataset.tab === 'monitor') refreshHealth();
+    if (btn.dataset.tab === 'monitor') { refreshHealth(); connectMonitorSSE(); }
   });
 });
 setInterval(() => {
@@ -2488,52 +2595,40 @@ async function deleteTestText(id) {
 let matrixSortCol = null;   // tagId of the column currently sorted, or null = sort by voice name
 let matrixSortDir = 1;      // 1 = ascending, -1 = descending
 
-// Ordered column list: gender group → source group → other tags (parent first, children after)
+// Ordered column list: follows tag_order from voice-meta (same order as Tags tab).
+// Groups are determined by top-level parent.  Each column carries its tag colour.
 function getMatrixColumns() {
-  const GENDER_PRIORITY = ['male', 'female', 'unknown'];
-  const SOURCE_PRIORITY = ['built-in', 'community', 'private'];
+  const allTags = allVoiceMeta.tags || {};
+  const tagOrder = allVoiceMeta.tag_order || [];
 
-  function tidFor(name) {
-    for (const [tid, t] of Object.entries(allVoiceMeta.tags || {})) {
-      if (t.name === name) return tid;
+  // Build order: tag_order first, then anything not yet seen (fallback)
+  const ordered = [
+    ...tagOrder.filter(tid => allTags[tid]),
+    ...Object.keys(allTags).filter(tid => !tagOrder.includes(tid)),
+  ];
+
+  // Determine group = name of the root ancestor (for separator logic)
+  function rootGroup(tid) {
+    let t = allTags[tid];
+    let cur = tid;
+    while (t && t.parent && allTags[t.parent]) {
+      cur = t.parent;
+      t = allTags[cur];
     }
-    return null;
+    return allTags[cur]?.name || 'other';
   }
 
   const cols = [];
-  const seen = new Set();
-
-  const addTag = (name, group) => {
-    const tid = tidFor(name);
-    if (tid && !seen.has(tid)) { cols.push({ tid, name, group }); seen.add(tid); }
-  };
-
-  GENDER_PRIORITY.forEach(n => addTag(n, 'gender'));
-  SOURCE_PRIORITY.forEach(n => addTag(n, 'source'));
-
-  // Remaining tags: parents first, children after parent, alpha within
-  const allTags = allVoiceMeta.tags || {};
-  const parents = Object.entries(allTags)
-    .filter(([tid, t]) => !seen.has(tid) && !t.parent_id)
-    .sort(([, a], [, b]) => a.name.localeCompare(b.name));
-
-  for (const [ptid, pt] of parents) {
-    seen.add(ptid);
-    cols.push({ tid: ptid, name: pt.name, group: 'other' });
-    const children = Object.entries(allTags)
-      .filter(([ctid, ct]) => !seen.has(ctid) && ct.parent_id === ptid)
-      .sort(([, a], [, b]) => a.name.localeCompare(b.name));
-    for (const [ctid, ct] of children) {
-      seen.add(ctid);
-      cols.push({ tid: ctid, name: ct.name, group: 'other' });
-    }
+  for (const tid of ordered) {
+    const t = allTags[tid];
+    if (!t) continue;
+    cols.push({
+      tid,
+      name: t.name,
+      color: t.color || 'var(--border)',
+      group: rootGroup(tid),
+    });
   }
-
-  // Any remaining (children whose parent wasn't in list yet — shouldn't happen but be safe)
-  for (const [tid, t] of Object.entries(allTags)) {
-    if (!seen.has(tid)) cols.push({ tid, name: t.name, group: 'other' });
-  }
-
   return cols;
 }
 
@@ -2579,7 +2674,8 @@ function renderMatrix() {
     const sepClass = isSep ? ' grp-sep' : '';
     prevGroup = col.group;
     const sortMark = matrixSortCol === col.tid ? (matrixSortDir === 1 ? ' ▲' : ' ▼') : '';
-    headerCells += `<th class="col-label${sepClass}" onclick="matrixSortByCol('${col.tid}')" title="${escAttr(col.name)}">${escHtml(col.name)}${sortMark}</th>`;
+    const colStyle = col.color ? ` style="--col-color:${escAttr(col.color)};color:${escAttr(col.color)}"` : '';
+    headerCells += `<th class="col-label${sepClass}"${colStyle} onclick="matrixSortByCol('${col.tid}')" title="${escAttr(col.name)}">${escHtml(col.name)}${sortMark}</th>`;
   }
 
   let bodyRows = '';

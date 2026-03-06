@@ -385,6 +385,62 @@ def delete_test_text(text_id):
     return jsonify({'deleted': True, 'id': text_id})
 
 
+# ══════════════════════════════════════════════════════════════════
+# Monitor — SSE feed and REST snapshot of recent TTS requests
+# ══════════════════════════════════════════════════════════════════
+
+@api.route('/v1/monitor/stream', methods=['GET'])
+def monitor_stream():
+    """
+    SSE endpoint — streams new TTS request events as they arrive.
+    On connect: replays all buffered events (oldest first), then streams new ones.
+    Sends a keepalive comment every 15s to prevent proxy timeouts.
+    """
+    import queue as _queue
+    from app.services import monitor_service
+
+    def generate():
+        # Replay existing buffer so new subscriber sees recent history
+        for evt in monitor_service.get_events():
+            yield f'data: {json.dumps(evt)}\n\n'
+
+        q = monitor_service.subscribe()
+        try:
+            while True:
+                try:
+                    evt = q.get(timeout=15)
+                    yield f'data: {json.dumps(evt)}\n\n'
+                except _queue.Empty:
+                    # Keepalive comment — keeps connection alive through proxies
+                    yield ': keepalive\n\n'
+        finally:
+            monitor_service.unsubscribe(q)
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'X-Accel-Buffering': 'no',
+        },
+    )
+
+
+@api.route('/v1/monitor/events', methods=['GET'])
+def monitor_events():
+    """REST snapshot — returns all buffered events as JSON (oldest first)."""
+    from app.services import monitor_service
+    return jsonify({'object': 'list', 'data': monitor_service.get_events()})
+
+
+@api.route('/v1/monitor/events', methods=['DELETE'])
+def monitor_events_clear():
+    """Clear all buffered monitor events (server-side + triggers UI refresh)."""
+    from app.services import monitor_service
+    monitor_service.clear_events()
+    return jsonify({'cleared': True})
+
+
 @api.route('/v1/audio/speech', methods=['POST'])
 def generate_speech():
     """
@@ -452,8 +508,8 @@ def generate_speech():
             text = text_preprocessor.process(text)
             # logger.info(f'Preprocessed text: {text}')
         if use_streaming:
-            return _stream_audio(tts, voice_state, text, target_format)
-        return _generate_file(tts, voice_state, text, target_format)
+            return _stream_audio(tts, voice_state, text, target_format, voice_name=voice, req_text=text)
+        return _generate_file(tts, voice_state, text, target_format, voice_name=voice, req_text=text)
 
     except ValueError as e:
         logger.warning(f'Voice loading failed: {e}')
@@ -463,13 +519,27 @@ def generate_speech():
         return jsonify({'error': str(e)}), 500
 
 
-def _generate_file(tts, voice_state, text: str, fmt: str):
+def _generate_file(tts, voice_state, text: str, fmt: str, voice_name: str = '', req_text: str = ''):
     """Generate complete audio and return as file."""
     t0 = time.time()
     audio_tensor = tts.generate_audio(voice_state, text)
     generation_time = time.time() - t0
 
     logger.info(f'Generated {len(text)} chars in {generation_time:.2f}s')
+
+    # Record monitor event — for batch mode TTFA equals the full generation time
+    audio_duration = audio_tensor.shape[-1] / max(tts.sample_rate, 1)
+    from app.services import monitor_service
+    monitor_service.record_event({
+        'ts': t0,
+        'voice': voice_name or 'unknown',
+        'text_preview': req_text[:200],
+        'text_full': req_text,
+        'ttfa': round(generation_time, 3),
+        'audio_duration': round(audio_duration, 2),
+        'gen_time': round(generation_time, 2),
+        'mode': 'batch',
+    })
 
     audio_buffer = convert_audio(audio_tensor, tts.sample_rate, fmt)
     mimetype = get_mime_type(fmt)
@@ -479,7 +549,7 @@ def _generate_file(tts, voice_state, text: str, fmt: str):
     )
 
 
-def _stream_audio(tts, voice_state, text: str, fmt: str):
+def _stream_audio(tts, voice_state, text: str, fmt: str, voice_name: str = '', req_text: str = ''):
     """Stream audio chunks."""
     # Normalize streaming format: we always emit PCM bytes, optionally wrapped
     # in a WAV container. For non-PCM/WAV formats (e.g. mp3, opus), coerce to
@@ -493,10 +563,30 @@ def _stream_audio(tts, voice_state, text: str, fmt: str):
         )
         stream_fmt = 'pcm'
 
+    t_start = time.time()
+    _ttfa: list[float | None] = [None]
+    _total_samples: list[int] = [0]
+
     def generate():
         stream = tts.generate_audio_stream(voice_state, text)
         for chunk_tensor in stream:
+            if _ttfa[0] is None:
+                _ttfa[0] = time.time() - t_start
+            _total_samples[0] += chunk_tensor.shape[-1]
             yield tensor_to_pcm_bytes(chunk_tensor)
+        # Record monitor event after the last chunk is yielded
+        from app.services import monitor_service
+        audio_duration = _total_samples[0] / max(tts.sample_rate, 1)
+        monitor_service.record_event({
+            'ts': t_start,
+            'voice': voice_name or 'unknown',
+            'text_preview': req_text[:200],
+            'text_full': req_text,
+            'ttfa': round(_ttfa[0] or 0.0, 3),
+            'audio_duration': round(audio_duration, 2),
+            'gen_time': round(time.time() - t_start, 2),
+            'mode': 'stream',
+        })
 
     def stream_with_header():
         # Yield WAV header first if streaming as WAV
