@@ -1,375 +1,1110 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-	<head>
-		<meta charset="UTF-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>Pocket TTS - Local Streaming</title>
-		<link rel="stylesheet" href="/static/css/style.css" />
-		<link rel="preconnect" href="https://fonts.googleapis.com" />
-		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-		<link
-			href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-			rel="stylesheet"
-		/>
-	</head>
-	<body>
-		<script>
-			// Pass server config to JavaScript
-			window.POCKET_TTS_CONFIG = {
-			    isDocker: {{ 'true' if is_docker else 'false' }}
-			};
-		</script>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pocket TTS — OpenAI Compatible — xarta</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%23111'/><text x='16' y='22' font-family='Arial,sans-serif' font-size='13' font-weight='bold' fill='white' text-anchor='middle'>TTS</text></svg>">
+<style>
+  :root {
+    --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a; --border: #2e3250;
+    --accent: #5c6ef8; --accent-dim: #3a4acc; --green: #22c55e; --red: #ef4444;
+    --yellow: #f59e0b; --text: #e2e8f0; --text-dim: #8892a8;
+    --font: 'Inter', system-ui, -apple-system, sans-serif;
+    --mono: 'Fira Code', 'Cascadia Code', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; min-height: 100vh; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
 
-		<div class="container">
-			<header>
-				<img
-					src="/static/images/pocket-tts-logo.png"
-					alt="Pocket TTS Logo"
-					class="logo"
-				/>
-				<h1>Pocket TTS</h1>
-				<p class="subtitle">Real-time local speech synthesis & voice cloning</p>
-			</header>
+  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; align-items: center; gap: 12px; height: 52px; flex-wrap: wrap; }
+  header h1 { font-size: 16px; font-weight: 600; letter-spacing: 0.02em; }
+  header h1 span { color: var(--accent); }
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .badge.cpu { background: #1e3a5f; color: #60a5fa; }
+  .badge.oai { background: #143322; color: #4ade80; }
+  .badge.green { background: #14532d; color: var(--green); }
+  .badge.yellow { background: #451a03; color: var(--yellow); }
+  .badge.red { background: #450a0a; color: var(--red); }
+  .badge.grey { background: #1e2030; color: var(--text-dim); }
+  .badge.blue { background: #1e3052; color: #60a5fa; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 
-			<div class="content">
-				<div class="control-group">
-					<label for="text-input">Text Prompt</label>
-					<textarea
-						id="text-input"
-						placeholder="Enter text to generate speech..."
-					>
-Hello! I am Pocket TTS, running locally on your machine. I can clone voices and stream audio in real-time.</textarea
-					>
-				</div>
+  nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; gap: 4px; overflow-x: auto; }
+  nav button { background: none; border: none; color: var(--text-dim); padding: 12px 16px; font-size: 13px; font-weight: 500; cursor: pointer; border-bottom: 2px solid transparent; transition: 0.15s; white-space: nowrap; }
+  nav button:hover { color: var(--text); }
+  nav button.active { color: var(--accent); border-bottom-color: var(--accent); }
 
-				<div class="control-group">
-					<label for="voice-input">Voice Selection</label>
-					<div class="input-with-action">
-						<input
-							id="voice-input"
-							type="text"
-							autocomplete="off"
-							placeholder="Select a voice..."
-						/>
-						<button
-							type="button"
-							class="clear-btn"
-							id="voice-clear-btn"
-							aria-label="Clear voice search"
-						>
-							<svg
-								width="14"
-								height="14"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							>
-								<line x1="18" y1="6" x2="6" y2="18"></line>
-								<line x1="6" y1="6" x2="18" y2="18"></line>
-							</svg>
-						</button>
-						<ul
-							id="voice-list"
-							class="voice-list"
-							aria-label="Available voices"
-						>
-							<!-- Populated by JS -->
-						</ul>
-					</div>
-					<div id="voice-id-display" class="voice-id-helper hidden">
-						ID: <span class="voice-id-text"></span>
-						<button
-							class="copy-btn"
-							id="voice-id-copy-btn"
-							title="Copy to clipboard"
-						>
-							<svg
-								width="12"
-								height="12"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-							>
-								<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-								<path
-									d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
-								></path>
-							</svg>
-						</button>
-					</div>
-				</div>
+  main { padding: 24px; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .grid3 { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+  @media (max-width: 768px) { .grid2 { grid-template-columns: 1fr; } }
 
-				<div class="control-group hidden" id="custom-voice-group">
-					<label for="voice-file"
-						>Upload Reference Audio (WAV, MP3, FLAC)</label
-					>
-					<input type="file" id="voice-file" accept=".wav,.mp3,.flac" />
-				</div>
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .card-title { font-size: 13px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 14px; }
+  .card-full { grid-column: 1 / -1; }
+  .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-label { color: var(--text-dim); }
+  .stat-value { font-weight: 500; }
 
-				<div class="control-group">
-					<label for="format-select">Output Format</label>
-					<select
-						id="format-select"
-						style="
-							width: 100%;
-							padding: 8px;
-							border-radius: 4px;
-							border: 1px solid var(--border-color);
-							background: var(--input-bg);
-							color: var(--text-color);
-						"
-					>
-						<option value="mp3">MP3</option>
-						<option value="wav" selected>WAV</option>
-						<option value="pcm">PCM (Raw)</option>
-					</select>
-				</div>
+  label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 5px; font-weight: 500; }
+  input, select, textarea { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 8px 11px; font-size: 13px; font-family: var(--font); outline: none; transition: 0.15s; }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 90px; }
+  .form-row { margin-bottom: 14px; }
+  .form-actions { display: flex; gap: 10px; margin-top: 14px; align-items: center; flex-wrap: wrap; }
 
-				<div class="control-group">
-					<label
-						for="stream-toggle"
-						style="display: inline-flex; align-items: center; cursor: pointer"
-					>
-						<input
-							type="checkbox"
-							id="stream-toggle"
-							checked
-							style="width: auto; margin-right: 8px"
-						/>
-						Enable Streaming Response
-					</label>
-					<p
-						id="format-info"
-						style="
-							font-size: 0.85em;
-							color: var(--text-secondary);
-							margin-top: 8px;
-							line-height: 1.4;
-						"
-					></p>
-				</div>
+  button.btn { background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer; transition: 0.15s; }
+  button.btn:hover { background: var(--accent-dim); }
+  button.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  button.btn.secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  button.btn.secondary:hover { background: var(--border); }
+  button.btn.danger { background: var(--red); }
+  button.btn.small { padding: 5px 11px; font-size: 12px; }
 
-				<button id="generate-btn" class="btn-primary">
-					<span>Generate Speech</span>
-					<div class="spinner"></div>
-				</button>
+  pre { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 14px; font-family: var(--mono); font-size: 12px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+  code { font-family: var(--mono); font-size: 12px; background: var(--surface2); padding: 1px 5px; border-radius: 3px; }
 
-				<div class="output-section" id="output-section">
-					<audio id="audio-player" controls></audio>
-					<br />
-					<a href="#" id="download-btn" class="download-link">Download Audio</a>
-				</div>
-			</div>
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 8px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); border-bottom: 1px solid var(--border); }
+  td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .method { font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 4px; }
+  .method.get { background: #163d1e; color: #4ade80; }
+  .method.post { background: #1e3052; color: #60a5fa; }
 
-			<!-- API Documentation -->
-			<div class="api-docs">
-				<h2>API Documentation</h2>
-				<p class="api-intro">
-					OpenAI-compatible TTS API. Use any OpenAI TTS client by pointing it to
-					this server.
-				</p>
+  .voice-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 8px; position: relative; }
+  .voice-card.selected { border-color: var(--accent); }
+  .voice-name { font-weight: 700; font-size: 14px; word-break: break-all; }
+  .voice-meta { font-size: 11px; color: var(--text-dim); }
 
-				<!-- Health Endpoint -->
-				<div class="endpoint">
-					<div class="endpoint-header">
-						<span class="method get">GET</span>
-						<code class="path">/health</code>
-					</div>
-					<p class="endpoint-desc">
-						Health check endpoint for container orchestration and monitoring.
-					</p>
-					<div class="response-example">
-						<strong>Response:</strong>
-						<pre>
-{
-  "status": "healthy",
-  "model_loaded": true,
-  "device": "cpu",
-  "sample_rate": 24000
-}</pre
-						>
-					</div>
-				</div>
+  audio { width: 100%; margin-top: 8px; border-radius: 6px; }
 
-				<!-- List Voices Endpoint -->
-				<div class="endpoint">
-					<div class="endpoint-header">
-						<span class="method get">GET</span>
-						<code class="path">/v1/voices</code>
-					</div>
-					<p class="endpoint-desc">
-						List all available voices (built-in and custom).
-					</p>
-					<div class="response-example">
-						<strong>Response:</strong>
-						<pre>
-{
-  "object": "list",
-  "data": [
-    {"id": "alba", "name": "Alba", "object": "voice"},
-    {"id": "marius", "name": "Marius", "object": "voice"}
-  ]
-}</pre
-						>
-					</div>
-				</div>
+  .stream-log { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 12px; font-family: var(--mono); font-size: 12px; min-height: 80px; max-height: 200px; overflow-y: auto; }
+  .log-line { margin: 2px 0; }
+  .log-line.ok { color: var(--green); }
+  .log-line.err { color: var(--red); }
+  .log-line.info { color: var(--text-dim); }
+  .log-line.playing { color: #a78bfa; }
 
-				<!-- Generate Speech Endpoint -->
-				<div class="endpoint">
-					<div class="endpoint-header">
-						<span class="method post">POST</span>
-						<code class="path">/v1/audio/speech</code>
-					</div>
-					<p class="endpoint-desc">
-						Generate speech audio from text. OpenAI-compatible endpoint.
-					</p>
+  .progress-wrap { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin: 8px 0; }
+  .progress-bar { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s; border-radius: 3px; }
 
-					<div class="params-section">
-						<strong>Request Body (JSON):</strong>
-						<table class="params-table">
-							<thead>
-								<tr>
-									<th>Parameter</th>
-									<th>Type</th>
-									<th>Required</th>
-									<th>Default</th>
-									<th>Description</th>
-								</tr>
-							</thead>
-							<tbody>
-								<tr>
-									<td><code>input</code></td>
-									<td>string</td>
-									<td>✓</td>
-									<td>-</td>
-									<td>The text to generate speech from (max 4096 chars)</td>
-								</tr>
-								<tr>
-									<td><code>voice</code></td>
-									<td>string</td>
-									<td></td>
-									<td><code>alba</code></td>
-									<td>
-										Voice ID, filename, or URL. See <code>/v1/voices</code>
-									</td>
-								</tr>
-								<tr>
-									<td><code>model</code></td>
-									<td>string</td>
-									<td></td>
-									<td>-</td>
-									<td>Ignored (for OpenAI compatibility)</td>
-								</tr>
-								<tr>
-									<td><code>response_format</code></td>
-									<td>string</td>
-									<td></td>
-									<td><code>mp3</code></td>
-									<td>
-										Audio format: <code>mp3</code>, <code>wav</code>,
-										<code>pcm</code>, <code>opus</code>, <code>flac</code>
-									</td>
-								</tr>
-								<tr>
-									<td><code>stream</code></td>
-									<td>boolean</td>
-									<td></td>
-									<td><code>true</code></td>
-									<td>Enable streaming response for real-time playback</td>
-								</tr>
-								<!-- <tr>
-									<td><code>speed</code></td>
-									<td>number</td>
-									<td></td>
-									<td><code>1.0</code></td>
-									<td>Playback speed (0.25 to 4.0)</td>
-								</tr> -->
-							</tbody>
-						</table>
-					</div>
+  .history-item { background: var(--surface2); border-radius: 6px; padding: 10px 14px; margin-bottom: 8px; display: flex; align-items: center; gap: 12px; font-size: 12px; }
+  .history-meta { flex: 1; color: var(--text-dim); }
+  .history-text { color: var(--text); font-size: 13px; }
 
-					<div class="example-section">
-						<strong>Example Request (curl):</strong>
-						<pre>
-curl -X POST http://localhost:49112/v1/audio/speech \
+  .section-title { font-size: 13px; font-weight: 700; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; margin: 24px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .mt12 { margin-top: 12px; }
+  .mt20 { margin-top: 20px; }
+  .flex-gap { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .timing { font-size: 12px; color: var(--text-dim); font-family: var(--mono); }
+  .info-box { color: var(--text-dim); font-size: 13px; line-height: 1.6; padding: 12px 14px; background: var(--surface2); border-radius: 6px; border-left: 3px solid var(--accent); }
+  .search-input { max-width: 320px; }
+  .voices-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+  #tab-voices { padding-bottom: 80px; }
+  #voice-test-section {
+    position: fixed !important; bottom: 0; left: 0; right: 0; z-index: 300;
+    display: flex; flex-direction: row; align-items: center; gap: 14px;
+    border-radius: 0 !important; border-top: 2px solid var(--accent);
+    background: var(--surface) !important; padding: 10px 24px !important;
+    box-shadow: 0 -6px 30px rgba(0,0,0,0.5); margin: 0 !important;
+  }
+  #voice-test-section .card-title { margin-bottom: 0; white-space: nowrap; }
+  #voice-test-section #voice-test-status { font-size: 13px; color: var(--text-dim); white-space: nowrap; }
+  #voice-test-section audio { flex: 1; min-width: 200px; max-width: 600px; height: 36px; }
+  #voice-test-section .player-close { margin-left: auto; background: none; border: 1px solid var(--border); color: var(--text-dim); border-radius: 6px; padding: 4px 10px; font-size: 18px; line-height: 1; cursor: pointer; }
+  #voice-test-section .player-close:hover { color: var(--text); border-color: var(--text-dim); }
+  .json-display { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow-y: auto; color: var(--text); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🎙 <span>Pocket</span> TTS <span style="color:var(--text-dim);font-weight:400">OpenAI</span></h1>
+  <span class="badge cpu"><span class="dot"></span>CPU</span>
+  <span class="badge oai">⚡ OpenAI Compatible</span>
+  <span class="badge grey" id="status-badge"><span class="dot"></span>Checking…</span>
+</header>
+
+<nav id="tab-nav">
+  <button class="active" data-tab="dashboard">Dashboard</button>
+  <button data-tab="config">Config</button>
+  <button data-tab="voices">Voices</button>
+  <button data-tab="monitor">Monitor</button>
+  <button data-tab="test">Test Page</button>
+</nav>
+
+<main>
+
+<!-- ══════════════════════ DASHBOARD ══════════════════════ -->
+<div class="tab-panel active" id="tab-dashboard">
+  <div class="grid2">
+
+    <div class="card">
+      <div class="card-title">Service Status</div>
+      <div class="stat-row"><span class="stat-label">Status</span><span class="stat-value" id="svc-status">—</span></div>
+      <div class="stat-row"><span class="stat-label">Model</span><span class="stat-value" id="svc-model">Kyutai Pocket TTS</span></div>
+      <div class="stat-row"><span class="stat-label">Device</span><span class="stat-value"><span class="badge cpu">CPU</span></span></div>
+      <div class="stat-row"><span class="stat-label">Sample Rate</span><span class="stat-value" id="svc-sample-rate">24 000 Hz</span></div>
+      <div class="stat-row"><span class="stat-label">Voices Available</span><span class="stat-value" id="svc-voices-count">Loading…</span></div>
+      <div class="stat-row"><span class="stat-label">Streaming Default</span><span class="stat-value"><span class="badge green">Enabled</span></span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Compatibility</div>
+      <div class="stat-row"><span class="stat-label">OpenAI TTS API</span><span class="stat-value"><span class="badge oai">✓ Compatible</span></span></div>
+      <div class="stat-row"><span class="stat-label">Endpoint</span><span class="stat-value"><code>POST /v1/audio/speech</code></span></div>
+      <div class="stat-row"><span class="stat-label">Streaming</span><span class="stat-value">✓ WAV / PCM chunked</span></div>
+      <div class="stat-row"><span class="stat-label">Formats</span><span class="stat-value">wav · pcm · mp3</span></div>
+      <div class="stat-row"><span class="stat-label">Voice Cloning</span><span class="stat-value">✓ Custom WAV voices</span></div>
+      <div class="stat-row"><span class="stat-label">Upstream</span><span class="stat-value"><a href="https://github.com/davros1973/pocket-tts-openai_streaming_server-fork-copy" target="_blank">fork on GitHub</a></span></div>
+    </div>
+
+    <!-- API & Integration (full width) -->
+    <div class="card card-full">
+      <div class="card-title">API &amp; Integration</div>
+      <div class="form-row">
+        <label>Service URL</label>
+        <input type="text" id="api-base-input" readonly value="">
+      </div>
+
+      <div class="section-title" style="margin-top:0">Endpoints</div>
+      <table>
+        <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><span class="method get">GET</span></td><td><code>/health</code></td><td>Health check → <code>{"status":"healthy","model_loaded":true,...}</code></td></tr>
+          <tr><td><span class="method get">GET</span></td><td><code>/v1/voices</code></td><td>List all available voices (OpenAI-compatible format)</td></tr>
+          <tr>
+            <td><span class="method post">POST</span></td>
+            <td><code>/v1/audio/speech</code></td>
+            <td>
+              Generate speech — OpenAI TTS API compatible.<br>
+              Body: <code>model</code> (ignored), <code>input</code> (text), <code>voice</code> (ID), <code>response_format</code> (wav/pcm/mp3), <code>stream</code> (bool).<br>
+              Returns streaming WAV/PCM or complete MP3 file.
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="section-title">cURL Examples</div>
+      <pre id="curl-batch">curl -X POST http://localhost:8884/v1/audio/speech \
   -H "Content-Type: application/json" \
-  -d '{
-    "input": "Hello world!",
-    "voice": "alba",
-    "response_format": "mp3"
-  }' \
-  --output speech.mp3</pre
-						>
-					</div>
+  -d '{"model":"pocket-tts","input":"Hello world","voice":"alba","response_format":"mp3","stream":false}' \
+  --output speech.mp3</pre>
+      <pre id="curl-stream" style="margin-top:10px">curl -X POST http://localhost:8884/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{"model":"pocket-tts","input":"Hello world","voice":"alba","response_format":"wav","stream":true}' \
+  --output speech_stream.wav</pre>
 
-					<div class="example-section">
-						<strong>Example (Python with OpenAI client):</strong>
-						<pre>
-from openai import OpenAI
+      <div class="section-title">LiteLLM Integration</div>
+      <div class="info-box" style="margin-bottom:12px">
+        This service is <strong style="color:var(--text)">OpenAI TTS-compatible</strong> — add it to LiteLLM's <code>config.yaml</code> (TTS proxy), or call it directly from OpenWebUI / any OpenAI TTS client by pointing <code>api_base</code> at this service.
+      </div>
+      <pre id="litellm-config">model_list:
+  - model_name: pocket-tts
+    litellm_params:
+      model: openai/tts-1
+      api_base: http://192.168.70.171:8884
+      api_key: dummy
+      stream: true</pre>
+
+      <div class="section-title">Python / OpenAI SDK</div>
+      <pre id="py-example">from openai import OpenAI
 
 client = OpenAI(
-    base_url="http://localhost:49112/v1",
-    api_key="not-needed"
+    api_key="dummy",
+    base_url="http://localhost:8884"
 )
 
-response = client.audio.speech.create(
-    model="tts-1",
+with client.audio.speech.with_streaming_response.create(
+    model="pocket-tts",
     voice="alba",
-    input="Hello world!"
-)
-response.stream_to_file("output.mp3")</pre
-						>
-					</div>
+    input="Hello from Pocket TTS running on xarta!"
+) as resp:
+    resp.stream_to_file("speech.mp3")</pre>
+    </div>
+  </div>
+</div>
 
-					<div class="response-example">
-						<strong>Response:</strong>
-						<p>Audio file in the requested format (binary stream).</p>
-						<p>
-							<strong>Content-Type:</strong> <code>audio/mpeg</code>,
-							<code>audio/wav</code>, <code>audio/opus</code>, etc.
-						</p>
-					</div>
+<!-- ══════════════════════ CONFIG ══════════════════════ -->
+<div class="tab-panel" id="tab-config">
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title">Default Voice</div>
+      <div class="form-row">
+        <label>Voice (used in test page defaults)</label>
+        <select id="cfg-voice">
+          <option value="alba">alba (builtin)</option>
+          <option value="marius">marius (builtin)</option>
+          <option value="javert">javert (builtin)</option>
+          <option value="jean">jean (builtin)</option>
+          <option value="fantine">fantine (builtin)</option>
+          <option value="cosette">cosette (builtin)</option>
+          <option value="eponine">eponine (builtin)</option>
+          <option value="azelma">azelma (builtin)</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>Default Format</label>
+        <select id="cfg-format">
+          <option value="wav">wav (streaming-friendly)</option>
+          <option value="mp3">mp3 (compressed)</option>
+          <option value="pcm">pcm (raw int16 LE)</option>
+        </select>
+      </div>
+      <div class="form-actions">
+        <button class="btn" onclick="saveConfig()">Save Defaults</button>
+        <span id="cfg-saved" style="color:var(--green); font-size:12px; display:none">✓ Saved</span>
+      </div>
+    </div>
 
-					<div class="error-section">
-						<strong>Error Response:</strong>
-						<pre>
-{
-  "error": "Missing required field: input"
-}</pre
-						>
-					</div>
-				</div>
+    <div class="card">
+      <div class="card-title">Model Info</div>
+      <div class="stat-row"><span class="stat-label">Parameters</span><span class="stat-value">100M</span></div>
+      <div class="stat-row"><span class="stat-label">Architecture</span><span class="stat-value">Transformer (LSD-based)</span></div>
+      <div class="stat-row"><span class="stat-label">Sample Rate</span><span class="stat-value">24 000 Hz</span></div>
+      <div class="stat-row"><span class="stat-label">CPU Cores</span><span class="stat-value">~2</span></div>
+      <div class="stat-row"><span class="stat-label">Memory</span><span class="stat-value">~500 MB</span></div>
+      <div class="stat-row"><span class="stat-label">Builtin Voices</span><span class="stat-value">8 (via HuggingFace)</span></div>
+      <div class="stat-row"><span class="stat-label">Custom Voices</span><span class="stat-value" id="cfg-custom-count">Loading…</span></div>
+      <div class="stat-row"><span class="stat-label">WSGI Server</span><span class="stat-value">Waitress (4 threads)</span></div>
+    </div>
+  </div>
+</div>
 
-				<!-- Built-in Voices Reference -->
-				<div class="voices-reference">
-					<h3>Built-in Voices</h3>
-					<p>These voices work without authentication:</p>
-					<div class="voice-chips">
-						<span class="voice-chip">alba</span>
-						<span class="voice-chip">marius</span>
-						<span class="voice-chip">javert</span>
-						<span class="voice-chip">jean</span>
-						<span class="voice-chip">fantine</span>
-						<span class="voice-chip">cosette</span>
-						<span class="voice-chip">eponine</span>
-						<span class="voice-chip">azelma</span>
-					</div>
-					<p class="voice-note">
-						Custom voice cloning requires a
-						<a href="https://huggingface.co/kyutai/pocket-tts" target="_blank"
-							>HuggingFace token</a
-						>.
-					</p>
-				</div>
-			</div>
-		</div>
+<!-- ══════════════════════ VOICES ══════════════════════ -->
+<div class="tab-panel" id="tab-voices">
+  <div class="voices-header">
+    <input type="text" class="search-input" id="voice-search" placeholder="🔍 Filter voices…" oninput="filterVoices()" style="width:260px">
+    <span class="badge grey" id="voices-count-badge">Loading…</span>
+    <span class="badge blue" id="builtin-count-badge"></span>
+    <span class="badge grey" id="custom-count-badge"></span>
+    <button class="btn secondary small" onclick="loadVoices()">↻ Reload</button>
+    <button class="btn secondary small" onclick="precomputeVoices()" id="precache-btn" title="Pre-compute .safetensors for all voices — very fast loads after first run">⚡ Pre-cache All</button>
+    <span id="precache-status" style="font-size:12px;color:var(--text-dim);"></span>
+  </div>
+  <div id="voices-grid" class="grid3">
+    <div style="color:var(--text-dim); font-size:13px; grid-column:1/-1">Loading voices from /v1/voices…</div>
+  </div>
+  <div id="voice-test-section" style="display:none;" class="card">
+    <div class="card-title" id="voice-test-name">Testing voice</div>
+    <div id="voice-test-status">Generating…</div>
+    <audio id="voice-test-audio" controls></audio>
+    <button class="player-close" onclick="closeVoicePlayer()" title="Close">✕</button>
+  </div>
+</div>
 
-		<script src="/static/js/app.js"></script>
-	</body>
+<!-- ══════════════════════ MONITOR ══════════════════════ -->
+<div class="tab-panel" id="tab-monitor">
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title">Health Status <span style="font-size:11px;font-weight:400;color:var(--text-dim)">— auto-refreshes every 10s</span></div>
+      <div class="stat-row"><span class="stat-label">Overall</span><span class="stat-value" id="mon-status">—</span></div>
+      <div class="stat-row"><span class="stat-label">Model Loaded</span><span class="stat-value" id="mon-model-loaded">—</span></div>
+      <div class="stat-row"><span class="stat-label">Device</span><span class="stat-value" id="mon-device">—</span></div>
+      <div class="stat-row"><span class="stat-label">Sample Rate</span><span class="stat-value" id="mon-sample-rate">—</span></div>
+      <div class="stat-row"><span class="stat-label">Voices Dir</span><span class="stat-value" id="mon-voices-dir">—</span></div>
+      <div class="stat-row"><span class="stat-label">Voice Check</span><span class="stat-value" id="mon-voice-check">—</span></div>
+      <div class="stat-row"><span class="stat-label">Last Checked</span><span class="stat-value" id="mon-last-check">—</span></div>
+      <div style="margin-top:12px">
+        <button class="btn secondary small" onclick="refreshHealth()">↻ Refresh Now</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Raw /health Response</div>
+      <div class="json-display" id="mon-json">—</div>
+    </div>
+
+    <div class="card card-full">
+      <div class="card-title">Streaming Info</div>
+      <div class="info-box">
+        <strong style="color:var(--text)">Streaming endpoint:</strong> <code>POST /v1/audio/speech</code> with <code>"stream": true</code><br><br>
+        When streaming is enabled, the response is a chunked Transfer-Encoding HTTP stream in WAV or raw PCM format. The model generates audio incrementally — the first chunk arrives within ~200ms and the response continues until synthesis is complete.<br><br>
+        <strong style="color:var(--text)">Monitor note:</strong> This service does not expose a <code>/v1/monitor/stream</code> SSE endpoint. Use container logs for real-time inference output:<br>
+        <code>pct exec 841 -- docker logs -f pockettts-openai-tts</code>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════ TEST PAGE ══════════════════════ -->
+<div class="tab-panel" id="tab-test">
+
+  <!-- Batch Generation -->
+  <div class="section-title">Batch Generation (stream: false — returns complete file)</div>
+  <div class="card">
+    <div class="form-row">
+      <label>Text Input</label>
+      <textarea id="batch-text" placeholder="Enter text to synthesise…">Hello world. This is Pocket TTS running as an OpenAI-compatible server on the xarta infrastructure.</textarea>
+    </div>
+    <div class="grid2">
+      <div class="form-row">
+        <label>Voice</label>
+        <select id="batch-voice">
+          <option value="alba">alba</option>
+          <option value="marius">marius</option>
+          <option value="javert">javert</option>
+          <option value="jean">jean</option>
+          <option value="fantine">fantine</option>
+          <option value="cosette">cosette</option>
+          <option value="eponine">eponine</option>
+          <option value="azelma">azelma</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>Format</label>
+        <select id="batch-format">
+          <option value="wav">wav</option>
+          <option value="mp3" selected>mp3</option>
+          <option value="pcm">pcm (raw)</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="flex-gap">
+        <button class="btn secondary small" onclick="setPreset('Short')">Short</button>
+        <button class="btn secondary small" onclick="setPreset('Long')">Long</button>
+        <button class="btn secondary small" onclick="setPreset('Technical')">Technical</button>
+        <button class="btn secondary small" onclick="setPreset('MultiSentence')">Multi-sentence</button>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button class="btn" id="batch-btn" onclick="runBatch()">▶ Generate</button>
+      <span class="timing" id="batch-timing"></span>
+    </div>
+    <div id="batch-result" style="display:none; margin-top:12px;">
+      <audio id="batch-audio" controls style="width:100%"></audio>
+      <div class="flex-gap mt12">
+        <button class="btn secondary small" id="batch-download-btn">⬇ Download</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Real-time OpenAI Streaming -->
+  <div class="section-title">Real-time Streaming (stream: true — OpenAI API, Web Audio API)</div>
+  <div class="card">
+    <div class="info-box" style="margin-bottom:14px">
+      <strong style="color:var(--text)">How this works:</strong> Sends <code>POST /v1/audio/speech</code> with <code>"stream": true, "response_format": "wav"</code>.
+      Reads the chunked HTTP response body using <code>ReadableStream</code>. Skips the 44-byte WAV header, then decodes each arriving network chunk as int16 LE PCM → float32 and schedules it on the
+      Web Audio API <code>AudioContext</code>. First audio plays within ~200ms.
+    </div>
+    <div class="form-row">
+      <label>Text</label>
+      <textarea id="rt-text" placeholder="Text for real-time streaming…">Pocket TTS now offers an OpenAI-compatible streaming API. Audio is generated incrementally and streamed to the browser in real time using chunked transfer encoding. The Web Audio API schedules each arriving PCM chunk for immediate playback, so you hear speech starting almost immediately.</textarea>
+    </div>
+    <div class="grid2">
+      <div class="form-row">
+        <label>Voice</label>
+        <select id="rt-voice">
+          <option value="alba">alba</option>
+          <option value="marius">marius</option>
+          <option value="javert">javert</option>
+          <option value="jean">jean</option>
+          <option value="fantine">fantine</option>
+          <option value="cosette">cosette</option>
+          <option value="eponine">eponine</option>
+          <option value="azelma">azelma</option>
+        </select>
+      </div>
+      <div class="form-row" style="align-self:end">
+        <div class="flex-gap">
+          <button class="btn" id="rt-btn" onclick="runRealtime()">▶ Start Real-time</button>
+          <button class="btn danger" id="rt-stop-btn" onclick="stopRealtime()" disabled>■ Stop</button>
+          <span id="rt-badge" class="badge grey">idle</span>
+        </div>
+      </div>
+    </div>
+    <div class="stream-log" id="rt-log">
+      <div class="log-line info">Ready. Press Start Real-time to begin.</div>
+    </div>
+  </div>
+
+  <!-- Sentence Pipeline Streaming -->
+  <div class="section-title">Sentence Pipeline (parallel prefetch + sequential playback)</div>
+  <div class="card">
+    <div class="form-row">
+      <label>Text (automatically split into sentences)</label>
+      <textarea id="stream-text" placeholder="Enter longer text here…">The quick brown fox jumps over the lazy dog. This sentence pipeline fetches and plays each sentence in order. While one sentence is playing, the next is being fetched in parallel. This keeps latency low for long passages of text.</textarea>
+    </div>
+    <div class="grid2">
+      <div class="form-row">
+        <label>Voice</label>
+        <select id="stream-voice">
+          <option value="alba">alba</option>
+          <option value="marius">marius</option>
+          <option value="javert">javert</option>
+          <option value="jean">jean</option>
+          <option value="fantine">fantine</option>
+          <option value="cosette">cosette</option>
+          <option value="eponine">eponine</option>
+          <option value="azelma">azelma</option>
+        </select>
+      </div>
+      <div class="form-row" style="align-self:end">
+        <div class="flex-gap">
+          <button class="btn" id="stream-btn" onclick="runStream()">▶ Start Pipeline</button>
+          <button class="btn danger" id="stream-stop-btn" onclick="stopStream()" disabled>■ Stop</button>
+          <span id="stream-badge" class="badge grey">idle</span>
+        </div>
+      </div>
+    </div>
+    <div class="progress-wrap"><div class="progress-bar" id="stream-progress"></div></div>
+    <div class="stream-log" id="stream-log">
+      <div class="log-line info">Ready. Press Start Pipeline to begin.</div>
+    </div>
+  </div>
+
+  <!-- History -->
+  <div class="section-title">Playback History (last 20)</div>
+  <div id="history-container">
+    <div style="color:var(--text-dim); font-size:13px;">No generations yet.</div>
+  </div>
+
+</div>
+</main>
+
+<script>
+// ══════════════════════════════════════════════════════════════════
+// Config & State
+// ══════════════════════════════════════════════════════════════════
+const API = window.location.origin;
+let userConfig = { voice: 'alba', format: 'wav' };
+const genHistory = [];
+let allVoices = [];
+
+const BUILTIN_VOICES = ['alba','marius','javert','jean','fantine','cosette','eponine','azelma'];
+
+const PRESETS = {
+  Short: 'Hello world. This is Pocket TTS with an OpenAI-compatible API.',
+  Long: 'Pocket TTS is a lightweight text-to-speech system that now offers a fully OpenAI-compatible server. It runs efficiently on CPU and accepts the same JSON request format as the OpenAI TTS API. You can use it as a drop-in replacement with any client that supports the OpenAI audio speech endpoint.',
+  Technical: 'The transformer architecture employs multi-head self-attention. The OpenAI-compatible endpoint accepts JSON payloads with model, input, voice, response format, and stream parameters. Streaming returns chunked WAV audio in real-time using chunked transfer encoding.',
+  MultiSentence: 'The model is loaded and ready. It supports voice cloning using custom WAV files. The API is fully compatible with the OpenAI TTS specification. You can stream audio in real time using the Web Audio API.',
+};
+
+// ══════════════════════════════════════════════════════════════════
+// Tab navigation
+// ══════════════════════════════════════════════════════════════════
+document.querySelectorAll('#tab-nav button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#tab-nav button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    if (btn.dataset.tab === 'voices' && allVoices.length === 0) loadVoices();
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════
+// Startup
+// ══════════════════════════════════════════════════════════════════
+async function init() {
+  document.getElementById('api-base-input').value = API;
+
+  const curlBatch = `curl -X POST ${API}/v1/audio/speech \\\n  -H "Content-Type: application/json" \\\n  -d '{"model":"pocket-tts","input":"Hello world","voice":"alba","response_format":"mp3","stream":false}' \\\n  --output speech.mp3`;
+  const curlStream = `curl -X POST ${API}/v1/audio/speech \\\n  -H "Content-Type: application/json" \\\n  -d '{"model":"pocket-tts","input":"Hello world","voice":"alba","response_format":"wav","stream":true}' \\\n  --output speech_stream.wav`;
+  const litellm = `model_list:\n  - model_name: pocket-tts\n    litellm_params:\n      model: openai/tts-1\n      api_base: ${API}\n      api_key: dummy\n      stream: true`;
+  const pySdk = `from openai import OpenAI\n\nclient = OpenAI(\n    api_key="dummy",\n    base_url="${API}"\n)\n\nwith client.audio.speech.with_streaming_response.create(\n    model="pocket-tts",\n    voice="alba",\n    input="Hello from Pocket TTS on xarta!"\n) as resp:\n    resp.stream_to_file("speech.mp3")`;
+
+  document.getElementById('curl-batch').textContent = curlBatch;
+  document.getElementById('curl-stream').textContent = curlStream;
+  document.getElementById('litellm-config').textContent = litellm;
+  document.getElementById('py-example').textContent = pySdk;
+
+  try {
+    const saved = localStorage.getItem('pockettts-openai-config');
+    if (saved) {
+      userConfig = { ...userConfig, ...JSON.parse(saved) };
+      document.getElementById('cfg-voice').value = userConfig.voice;
+      document.getElementById('cfg-format').value = userConfig.format || 'wav';
+      ['batch-voice','rt-voice','stream-voice'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = userConfig.voice;
+      });
+    }
+  } catch (_) {}
+
+  await checkHealth();
+  setInterval(checkHealth, 30000);
+  loadVoiceCount();
+}
+
+async function loadVoiceCount() {
+  try {
+    const r = await fetch(`${API}/v1/voices`, { signal: AbortSignal.timeout(8000) });
+    const data = await r.json();
+    const total = data.data?.length || 0;
+    const builtin = data.data?.filter(v => v.type === 'builtin').length || 0;
+    const custom = total - builtin;
+    document.getElementById('svc-voices-count').textContent = `${total} (${builtin} builtin + ${custom} custom)`;
+    document.getElementById('cfg-custom-count').textContent = `${custom}`;
+  } catch (_) {
+    document.getElementById('svc-voices-count').textContent = 'unavailable';
+  }
+}
+
+async function checkHealth() {
+  const badge = document.getElementById('status-badge');
+  const svcEl = document.getElementById('svc-status');
+  try {
+    const r = await fetch(`${API}/health`, { signal: AbortSignal.timeout(5000) });
+    const data = await r.json();
+    if (data.status === 'healthy') {
+      badge.className = 'badge green';
+      badge.innerHTML = '<span class="dot"></span>Healthy';
+      svcEl.innerHTML = '<span class="badge green"><span class="dot"></span>Online</span>';
+      if (data.sample_rate) document.getElementById('svc-sample-rate').textContent = `${data.sample_rate.toLocaleString()} Hz`;
+    } else {
+      badge.className = 'badge yellow';
+      badge.innerHTML = '<span class="dot"></span>Degraded';
+      svcEl.innerHTML = '<span class="badge yellow">Degraded</span>';
+    }
+  } catch (_) {
+    badge.className = 'badge red';
+    badge.innerHTML = '<span class="dot"></span>Offline';
+    svcEl.innerHTML = '<span class="badge red">Offline</span>';
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Config
+// ══════════════════════════════════════════════════════════════════
+function saveConfig() {
+  userConfig.voice = document.getElementById('cfg-voice').value;
+  userConfig.format = document.getElementById('cfg-format').value;
+  localStorage.setItem('pockettts-openai-config', JSON.stringify(userConfig));
+  ['batch-voice','rt-voice','stream-voice'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = userConfig.voice;
+  });
+  ['batch-format'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = userConfig.format;
+  });
+  const saved = document.getElementById('cfg-saved');
+  saved.style.display = 'inline';
+  setTimeout(() => { saved.style.display = 'none'; }, 2000);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Monitor
+// ══════════════════════════════════════════════════════════════════
+async function refreshHealth() {
+  try {
+    const r = await fetch(`${API}/health`, { signal: AbortSignal.timeout(5000) });
+    const data = await r.json();
+
+    const ok = data.status === 'healthy';
+    document.getElementById('mon-status').innerHTML = ok
+      ? '<span class="badge green"><span class="dot"></span>healthy</span>'
+      : '<span class="badge yellow">unhealthy</span>';
+    document.getElementById('mon-model-loaded').innerHTML = data.model_loaded
+      ? '<span class="badge green">true</span>' : '<span class="badge red">false</span>';
+    document.getElementById('mon-device').textContent = data.device || 'cpu';
+    document.getElementById('mon-sample-rate').textContent = data.sample_rate ? `${data.sample_rate.toLocaleString()} Hz` : '—';
+    document.getElementById('mon-voices-dir').textContent = data.voices_dir || '—';
+    document.getElementById('mon-voice-check').innerHTML = data.voice_check?.valid
+      ? '<span class="badge green">✓ valid</span>' : `<span class="badge red">✗ ${data.voice_check?.message || 'invalid'}</span>`;
+    document.getElementById('mon-last-check').textContent = new Date().toLocaleTimeString();
+    document.getElementById('mon-json').textContent = JSON.stringify(data, null, 2);
+  } catch (e) {
+    document.getElementById('mon-status').innerHTML = '<span class="badge red">error</span>';
+    document.getElementById('mon-json').textContent = `Error: ${e.message}`;
+  }
+}
+
+// Auto-refresh monitor when tab is active
+document.querySelectorAll('#tab-nav button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (btn.dataset.tab === 'monitor') refreshHealth();
+  });
+});
+setInterval(() => {
+  if (document.getElementById('tab-monitor').classList.contains('active')) refreshHealth();
+}, 10000);
+
+// ══════════════════════════════════════════════════════════════════
+// Voices Tab
+// ══════════════════════════════════════════════════════════════════
+async function loadVoices() {
+  const grid = document.getElementById('voices-grid');
+  grid.innerHTML = '<div style="color:var(--text-dim); font-size:13px; grid-column:1/-1">Loading…</div>';
+  document.getElementById('voices-count-badge').textContent = 'Loading…';
+
+  try {
+    const r = await fetch(`${API}/v1/voices`, { signal: AbortSignal.timeout(10000) });
+    const data = await r.json();
+    allVoices = data.data || [];
+
+    const builtin = allVoices.filter(v => v.type === 'builtin');
+    const custom = allVoices.filter(v => v.type !== 'builtin');
+
+    document.getElementById('voices-count-badge').textContent = `${allVoices.length} total`;
+    document.getElementById('builtin-count-badge').textContent = `${builtin.length} builtin`;
+    document.getElementById('custom-count-badge').textContent = `${custom.length} custom`;
+
+    renderVoices(allVoices);
+  } catch (e) {
+    grid.innerHTML = `<div style="color:var(--red); font-size:13px; grid-column:1/-1">Error loading voices: ${e.message}</div>`;
+  }
+}
+
+function renderVoices(voices) {
+  const grid = document.getElementById('voices-grid');
+  if (voices.length === 0) {
+    grid.innerHTML = '<div style="color:var(--text-dim); font-size:13px; grid-column:1/-1">No voices match the filter.</div>';
+    return;
+  }
+  grid.innerHTML = voices.map(v => {
+    const isBuiltin = v.type === 'builtin';
+    return `<div class="voice-card" id="vc-${v.id}">
+      <div class="voice-name">🎙 ${v.name}</div>
+      <div class="voice-meta">
+        ${isBuiltin ? '<span class="badge blue" style="font-size:10px">builtin</span>' : '<span class="badge grey" style="font-size:10px">custom</span>'}
+        <code style="font-size:11px; margin-left:4px">${v.id}</code>
+      </div>
+      <button class="btn small" onclick="testVoice('${v.id}', '${v.name}')">▶ Test</button>
+    </div>`;
+  }).join('');
+}
+
+function filterVoices() {
+  const q = document.getElementById('voice-search').value.toLowerCase().trim();
+  const filtered = q ? allVoices.filter(v => v.name.toLowerCase().includes(q) || v.id.toLowerCase().includes(q)) : allVoices;
+  renderVoices(filtered);
+}
+
+async function testVoice(voiceId, voiceName) {
+  const section = document.getElementById('voice-test-section');
+  const nameEl = document.getElementById('voice-test-name');
+  const statusEl = document.getElementById('voice-test-status');
+  const audioEl = document.getElementById('voice-test-audio');
+
+  section.style.display = 'flex';
+  nameEl.textContent = `Testing: ${voiceName}`;
+  statusEl.textContent = 'Generating…';
+  statusEl.style.color = 'var(--text-dim)';
+  audioEl.src = '';
+
+  document.querySelectorAll('.voice-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById('vc-' + voiceId)?.classList.add('selected');
+
+  try {
+    const t0 = Date.now();
+    const resp = await fetch(`${API}/v1/audio/speech`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'pocket-tts', input: `Hello, I am ${voiceName}, testing on xarta.`, voice: voiceId, response_format: 'wav', stream: false }),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const blob = await resp.blob();
+    audioEl.src = URL.createObjectURL(blob);
+    audioEl.play();
+    statusEl.textContent = `Ready — ${((Date.now() - t0) / 1000).toFixed(2)}s`;
+  } catch (e) {
+    statusEl.textContent = `Error: ${e.message}`;
+    statusEl.style.color = 'var(--red)';
+  }
+}
+
+async function precomputeVoices() {
+  const btn = document.getElementById('precache-btn');
+  const status = document.getElementById('precache-status');
+  btn.disabled = true;
+  status.style.color = 'var(--text-dim)';
+  status.textContent = 'Starting…';
+
+  try {
+    const resp = await fetch(`${API}/v1/voices/precompute`, { method: 'POST' });
+    if (!resp.ok) { const e = await resp.json(); throw new Error(e.error || resp.statusText); }
+    const reader = resp.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const p = JSON.parse(line);
+          if (p.status === 'complete') {
+            const errs = p.errors?.length ? `, ${p.errors.length} errors` : '';
+            status.textContent = `✓ Done — ${p.total} voices cached${errs}`;
+            status.style.color = 'var(--green)';
+            btn.disabled = false;
+          } else if (p.status === 'error' && !p.voice) {
+            throw new Error(p.error);
+          } else {
+            const icon = p.status === 'cached' ? '✓' : p.status === 'error' ? '✗' : '⚡';
+            status.textContent = `${icon} ${p.done}/${p.total} — ${p.voice}`;
+            status.style.color = p.status === 'error' ? 'var(--yellow)' : 'var(--text-dim)';
+          }
+        } catch {}
+      }
+    }
+  } catch (e) {
+    status.textContent = `Error: ${e.message}`;
+    status.style.color = 'var(--red)';
+    btn.disabled = false;
+  }
+}
+
+function closeVoicePlayer() {
+  const section = document.getElementById('voice-test-section');
+  const audioEl = document.getElementById('voice-test-audio');
+  audioEl.pause();
+  audioEl.src = '';
+  section.style.display = 'none';
+  document.querySelectorAll('.voice-card').forEach(c => c.classList.remove('selected'));
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Test Page — Batch
+// ══════════════════════════════════════════════════════════════════
+function setPreset(key) {
+  document.getElementById('batch-text').value = PRESETS[key];
+}
+
+async function runBatch() {
+  const btn = document.getElementById('batch-btn');
+  const text = document.getElementById('batch-text').value.trim();
+  const voice = document.getElementById('batch-voice').value;
+  const fmt = document.getElementById('batch-format').value;
+  const timingEl = document.getElementById('batch-timing');
+  const resultDiv = document.getElementById('batch-result');
+
+  if (!text) { alert('Enter some text first.'); return; }
+  btn.disabled = true; btn.textContent = '⏳ Generating…';
+  timingEl.textContent = ''; resultDiv.style.display = 'none';
+
+  const t0 = Date.now();
+  try {
+    const resp = await fetch(`${API}/v1/audio/speech`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'pocket-tts', input: text, voice, response_format: fmt, stream: false }),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`HTTP ${resp.status}: ${errText}`);
+    }
+    const blob = await resp.blob();
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(2);
+    timingEl.textContent = `${elapsed}s — ${(blob.size / 1024).toFixed(0)} KB`;
+    const url = URL.createObjectURL(blob);
+    const audioEl = document.getElementById('batch-audio');
+    audioEl.src = url;
+    audioEl.play();
+    resultDiv.style.display = 'block';
+
+    const dlBtn = document.getElementById('batch-download-btn');
+    dlBtn.onclick = () => {
+      const a = document.createElement('a');
+      a.href = url; a.download = `pockettts-openai-${voice}-${Date.now()}.${fmt}`; a.click();
+    };
+    addHistory(text, voice, fmt, false);
+  } catch (e) {
+    timingEl.textContent = `Error: ${e.message}`;
+    timingEl.style.color = 'var(--red)';
+  } finally {
+    btn.disabled = false; btn.textContent = '▶ Generate';
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Test Page — Real-time PCM Stream (Web Audio API)
+//
+// Calls POST /v1/audio/speech with stream:true, response_format:'wav'.
+// Reads the chunked Transfer-Encoding body as a ReadableStream.
+// Skips 44-byte WAV header. Each arriving chunk is decoded as int16 LE PCM
+// → float32 (÷ 32767) and scheduled on Web Audio API AudioContext.
+// First audio plays within ~200ms while generation continues in parallel.
+// ══════════════════════════════════════════════════════════════════
+const RT_SAMPLE_RATE = 24000;
+const RT_WAV_HEADER_BYTES = 44;
+
+let rtAbortCtrl = null;
+let rtAudioCtx = null;
+let rtStopped = false;
+
+function logRT(msg, cls = 'info') {
+  const log = document.getElementById('rt-log');
+  const div = document.createElement('div');
+  div.className = `log-line ${cls}`;
+  div.textContent = msg;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+async function runRealtime() {
+  if (rtAbortCtrl) { rtAbortCtrl.abort(); }
+
+  const text = document.getElementById('rt-text').value.trim();
+  const voice = document.getElementById('rt-voice').value;
+  const startBtn = document.getElementById('rt-btn');
+  const stopBtn = document.getElementById('rt-stop-btn');
+  const badge = document.getElementById('rt-badge');
+
+  if (!text) { alert('Enter some text first.'); return; }
+
+  rtAbortCtrl = new AbortController();
+  rtStopped = false;
+  document.getElementById('rt-log').innerHTML = '';
+
+  if (!rtAudioCtx || rtAudioCtx.state === 'closed') {
+    rtAudioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: RT_SAMPLE_RATE });
+  }
+  if (rtAudioCtx.state === 'suspended') await rtAudioCtx.resume();
+
+  badge.className = 'badge green'; badge.textContent = 'streaming';
+  startBtn.disabled = true; stopBtn.disabled = false;
+  logRT(`Connecting — POST /v1/audio/speech stream:true voice:${voice}`);
+
+  let nextStartTime = rtAudioCtx.currentTime + 0.1;
+  let headerBytesRemaining = RT_WAV_HEADER_BYTES;
+  let leftover = null;
+  let totalChunks = 0;
+  const t0 = Date.now();
+
+  try {
+    const resp = await fetch(`${API}/v1/audio/speech`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'pocket-tts', input: text, voice, response_format: 'wav', stream: true }),
+      signal: rtAbortCtrl.signal,
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
+    logRT(`Connected (${((Date.now() - t0))}ms) — reading stream…`, 'ok');
+
+    const reader = resp.body.getReader();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (rtStopped) { reader.cancel(); break; }
+
+      let chunk = value;
+
+      // Skip WAV header bytes
+      if (headerBytesRemaining > 0) {
+        if (chunk.length <= headerBytesRemaining) {
+          headerBytesRemaining -= chunk.length;
+          continue;
+        }
+        chunk = chunk.slice(headerBytesRemaining);
+        headerBytesRemaining = 0;
+      }
+
+      // Combine with any leftover odd byte from previous chunk
+      let pcmData;
+      if (leftover !== null) {
+        const combined = new Uint8Array(leftover.length + chunk.length);
+        combined.set(leftover); combined.set(chunk, leftover.length);
+        pcmData = combined;
+        leftover = null;
+      } else {
+        pcmData = chunk;
+      }
+
+      // Ensure even length for int16 pairs
+      if (pcmData.length % 2 !== 0) {
+        leftover = pcmData.slice(-1);
+        pcmData = pcmData.slice(0, -1);
+      }
+
+      if (pcmData.length === 0) continue;
+
+      // Decode int16 LE → float32
+      const numSamples = pcmData.length / 2;
+      const float32 = new Float32Array(numSamples);
+      const view = new DataView(pcmData.buffer, pcmData.byteOffset);
+      for (let i = 0; i < numSamples; i++) {
+        float32[i] = view.getInt16(i * 2, true) / 32767;
+      }
+
+      // Schedule on AudioContext
+      const buf = rtAudioCtx.createBuffer(1, numSamples, RT_SAMPLE_RATE);
+      buf.copyToChannel(float32, 0);
+      const src = rtAudioCtx.createBufferSource();
+      src.buffer = buf;
+      src.connect(rtAudioCtx.destination);
+
+      const now = rtAudioCtx.currentTime;
+      if (nextStartTime < now) nextStartTime = now + 0.05;
+      src.start(nextStartTime);
+      nextStartTime += buf.duration;
+
+      totalChunks++;
+      if (totalChunks === 1) {
+        logRT(`First audio chunk scheduled — you should hear speech now`, 'playing');
+      }
+    }
+
+    if (!rtStopped) {
+      const elapsed = ((Date.now() - t0) / 1000).toFixed(2);
+      logRT(`Stream complete — ${totalChunks} chunks in ${elapsed}s`, 'ok');
+      badge.className = 'badge green'; badge.textContent = 'done';
+      addHistory(text, voice, 'wav', true);
+    }
+  } catch (e) {
+    if (!rtStopped) {
+      logRT(`Error: ${e.message}`, 'err');
+      badge.className = 'badge red'; badge.textContent = 'error';
+    }
+  } finally {
+    startBtn.disabled = false; stopBtn.disabled = true;
+    if (rtStopped) { badge.className = 'badge grey'; badge.textContent = 'stopped'; }
+  }
+}
+
+function stopRealtime() {
+  rtStopped = true;
+  if (rtAbortCtrl) { rtAbortCtrl.abort(); rtAbortCtrl = null; }
+  if (rtAudioCtx) { rtAudioCtx.close(); rtAudioCtx = null; }
+  document.getElementById('rt-btn').disabled = false;
+  document.getElementById('rt-stop-btn').disabled = true;
+  logRT('Stopped by user.', 'err');
+  document.getElementById('rt-badge').className = 'badge grey';
+  document.getElementById('rt-badge').textContent = 'stopped';
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Test Page — Sentence Pipeline Streaming
+// ══════════════════════════════════════════════════════════════════
+let streamAbortCtrl = null;
+let streamStopped = false;
+
+function splitSentences(text) {
+  return text.split(/(?<=[.!?])\s+/).map(s => s.trim()).filter(s => s.length > 0);
+}
+
+function logStream(msg, cls = 'info') {
+  const log = document.getElementById('stream-log');
+  const div = document.createElement('div');
+  div.className = `log-line ${cls}`;
+  div.textContent = msg;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+function setStreamBadge(text, cls) {
+  const b = document.getElementById('stream-badge');
+  b.textContent = text; b.className = `badge ${cls}`;
+}
+
+async function fetchSentenceAudio(sentence, voice, signal) {
+  const resp = await fetch(`${API}/v1/audio/speech`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: 'pocket-tts', input: sentence, voice, response_format: 'wav', stream: false }),
+    signal,
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return URL.createObjectURL(await resp.blob());
+}
+
+async function playAudioURL(url) {
+  return new Promise((resolve, reject) => {
+    const audio = new Audio(url);
+    audio.onended = resolve;
+    audio.onerror = reject;
+    audio.play().catch(reject);
+  });
+}
+
+async function runStream() {
+  if (streamAbortCtrl) streamAbortCtrl.abort();
+  const text = document.getElementById('stream-text').value.trim();
+  const voice = document.getElementById('stream-voice').value;
+  const startBtn = document.getElementById('stream-btn');
+  const stopBtn = document.getElementById('stream-stop-btn');
+
+  if (!text) { alert('Enter some text first.'); return; }
+  const sentences = splitSentences(text);
+  if (sentences.length === 0) { alert('No sentences found.'); return; }
+
+  streamAbortCtrl = new AbortController();
+  streamStopped = false;
+  document.getElementById('stream-log').innerHTML = '';
+  document.getElementById('stream-progress').style.width = '0%';
+  setStreamBadge('streaming', 'green');
+  startBtn.disabled = true; stopBtn.disabled = false;
+  logStream(`Starting pipeline: ${sentences.length} sentence(s), voice: ${voice}`);
+
+  try {
+    let nextAudioPromise = fetchSentenceAudio(sentences[0], voice, streamAbortCtrl.signal);
+    for (let i = 0; i < sentences.length; i++) {
+      if (streamStopped) break;
+      const s = sentences[i];
+      logStream(`[${i+1}/${sentences.length}] Waiting: "${s.substring(0, 50)}${s.length > 50 ? '…' : ''}"`, 'info');
+      let audioUrl;
+      try { audioUrl = await nextAudioPromise; }
+      catch (e) { if (streamStopped) break; logStream(`[${i+1}] Error: ${e.message}`, 'err'); break; }
+      if (streamStopped) break;
+      if (i + 1 < sentences.length) {
+        nextAudioPromise = fetchSentenceAudio(sentences[i + 1], voice, streamAbortCtrl.signal);
+      }
+      logStream(`[${i+1}/${sentences.length}] Playing…`, 'playing');
+      document.getElementById('stream-progress').style.width = (((i + 1) / sentences.length) * 100) + '%';
+      try { await playAudioURL(audioUrl); }
+      catch (e) { if (!streamStopped) logStream(`[${i+1}] Playback error: ${e.message}`, 'err'); break; }
+      logStream(`[${i+1}/${sentences.length}] Done`, 'ok');
+      URL.revokeObjectURL(audioUrl);
+    }
+    if (!streamStopped) {
+      setStreamBadge('done', 'green');
+      document.getElementById('stream-progress').style.width = '100%';
+      logStream('Pipeline complete.', 'ok');
+      addHistory(text, voice, 'wav', false);
+    }
+  } catch (e) {
+    if (!streamStopped) { logStream(`Error: ${e.message}`, 'err'); setStreamBadge('error', 'red'); }
+  } finally {
+    startBtn.disabled = false; stopBtn.disabled = true;
+    if (streamStopped) setStreamBadge('stopped', 'grey');
+  }
+}
+
+function stopStream() {
+  streamStopped = true;
+  if (streamAbortCtrl) { streamAbortCtrl.abort(); streamAbortCtrl = null; }
+  document.getElementById('stream-btn').disabled = false;
+  document.getElementById('stream-stop-btn').disabled = true;
+  logStream('Stopped by user.', 'err');
+  setStreamBadge('stopped', 'grey');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// History
+// ══════════════════════════════════════════════════════════════════
+function addHistory(text, voice, fmt, isStreamed) {
+  const container = document.getElementById('history-container');
+  genHistory.unshift({ text, voice, fmt, isStreamed, ts: new Date() });
+  if (genHistory.length > 20) genHistory.pop();
+  container.innerHTML = genHistory.map(h => `
+    <div class="history-item">
+      <div style="flex:1">
+        <div class="history-text">"${h.text.substring(0, 80)}${h.text.length > 80 ? '…' : ''}"</div>
+        <div class="history-meta">${h.ts.toLocaleTimeString()} · voice: ${h.voice} · format: ${h.fmt} · ${h.isStreamed ? 'streamed' : 'batch'}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Init
+// ══════════════════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
 </html>

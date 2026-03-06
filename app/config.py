@@ -40,6 +40,9 @@ class Config:
     # Voice directory
     VOICES_DIR = os.environ.get('POCKET_TTS_VOICES_DIR', None)
 
+    # Pre-computed voice state cache directory (.safetensors files)
+    VOICES_CACHE_DIR = os.environ.get('POCKET_TTS_VOICES_CACHE_DIR', None)
+
     # Streaming default
     STREAM_DEFAULT = os.environ.get('POCKET_TTS_STREAM_DEFAULT', 'false').lower() == 'true'
 

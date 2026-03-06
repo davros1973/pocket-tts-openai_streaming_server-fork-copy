@@ -2,6 +2,7 @@
 Flask routes for the OpenAI-compatible TTS API.
 """
 
+import json
 import time
 
 from flask import (
@@ -99,6 +100,22 @@ def list_voices():
             ],
         }
     )
+
+
+@api.route('/v1/voices/precompute', methods=['POST'])
+def precompute_voices():
+    """
+    Pre-compute .safetensors voice state cache for all custom WAV voices.
+    Returns a streaming NDJSON response with per-voice progress.
+    Skips voices that are already cached.
+    """
+    tts = get_tts_service()
+
+    def generate():
+        for progress in tts.precompute_voices():
+            yield json.dumps(progress) + '\n'
+
+    return Response(stream_with_context(generate()), mimetype='application/x-ndjson')
 
 
 @api.route('/v1/audio/speech', methods=['POST'])

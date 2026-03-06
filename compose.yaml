@@ -1,0 +1,48 @@
+services:
+  pockettts-openai:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pockettts-openai-tts
+    container_name: pockettts-openai-tts
+    labels:
+      xarta.service.type: "tts"
+      xarta.tts.name: "Pocket TTS (OpenAI)"
+      xarta.tts.openai_compatible: "true"
+      xarta.tts.gpu_required: "false"
+      xarta.tts.health_port: "${HOST_PORT:-8884}"
+      xarta.tts.admin_url: "${XARTA_ADMIN_URL:-}"
+    ports:
+      - "${HOST_PORT:-8884}:8000"
+    command: ["python", "server.py", "--port", "8000"]
+    volumes:
+      # Overlay upstream templates with our custom xarta UI
+      - ./templates:/app/templates:ro
+      # Community voice files (bundled in repo, mounted for easy updates)
+      - ./voices:/app/voices:ro
+      # Pre-computed .safetensors voice state cache (persisted; fast loads on restart)
+      - ./voices_cache:/app/voices_cache
+      # Persist HuggingFace model cache between restarts
+      - pockettts-openai-hf-cache:/root/.cache/huggingface
+      # Persist server logs
+      - ./logs:/app/logs
+    environment:
+      - POCKET_TTS_HOST=0.0.0.0
+      - POCKET_TTS_PORT=8000
+      - POCKET_TTS_VOICES_DIR=/app/voices
+      - POCKET_TTS_VOICES_CACHE_DIR=/app/voices_cache
+      - POCKET_TTS_LOG_DIR=/app/logs
+      - POCKET_TTS_LOG_LEVEL=INFO
+      - POCKET_TTS_STREAM_DEFAULT=true
+      - HF_HOME=/root/.cache/huggingface
+      - HF_TOKEN=${HF_TOKEN:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+volumes:
+  pockettts-openai-hf-cache:

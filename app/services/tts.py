@@ -40,6 +40,7 @@ class TTSService:
         self.model = None
         self.voice_cache: dict = {}
         self.voices_dir: str | None = None
+        self.voices_cache_dir: str | None = None
         self._model_loaded = False
 
     @property
@@ -118,6 +119,14 @@ class TTSService:
         else:
             self.voices_dir = None
 
+        # Set up voice state cache directory for pre-computed .safetensors files
+        cache_env = Config.VOICES_CACHE_DIR
+        if cache_env:
+            cache_path = Path(cache_env)
+            cache_path.mkdir(parents=True, exist_ok=True)
+            self.voices_cache_dir = str(cache_path)
+            logger.info(f'Voice cache directory: {self.voices_cache_dir}')
+
     def get_voice_state(self, voice_id_or_path: str) -> dict:
         """
         Resolve voice ID to a model state with caching.
@@ -151,6 +160,22 @@ class TTSService:
             self.voice_cache[resolved_key] = state
             load_time = time.time() - t0
             logger.info(f'Voice loaded in {load_time:.2f}s: {resolved_key}')
+            # Auto-save to .safetensors cache for fast loads on next restart
+            if (
+                self.voices_cache_dir
+                and isinstance(resolved_key, str)
+                and not resolved_key.endswith('.safetensors')
+                and os.path.isfile(resolved_key)
+            ):
+                stem = Path(resolved_key).stem
+                cache_file = Path(self.voices_cache_dir) / f'{stem}.safetensors'
+                if not cache_file.exists():
+                    try:
+                        from pocket_tts.models.tts_model import export_model_state
+                        export_model_state(state, cache_file)
+                        logger.info(f'Auto-cached voice state: {cache_file.name}')
+                    except Exception as ce:
+                        logger.warning(f'Could not auto-cache voice state: {ce}')
             return state
 
         except Exception as e:
@@ -191,13 +216,13 @@ class TTSService:
                 # Try exact match first
                 possible_path = os.path.join(self.voices_dir, voice_id_or_path)
                 if os.path.exists(possible_path):
-                    return os.path.abspath(possible_path)
+                    return self._prefer_cache(os.path.abspath(possible_path))
 
                 # Try with extension
                 if not voice_id_or_path.endswith(ext):
                     possible_path = os.path.join(self.voices_dir, voice_id_or_path + ext)
                     if os.path.exists(possible_path):
-                        return os.path.abspath(possible_path)
+                        return self._prefer_cache(os.path.abspath(possible_path))
 
         # Check if it's an absolute path that exists
         if os.path.isabs(voice_id_or_path) and os.path.exists(voice_id_or_path):
@@ -205,6 +230,19 @@ class TTSService:
 
         # Return as-is, let pocket-tts handle it
         return voice_id_or_path
+
+    def _prefer_cache(self, audio_path: str) -> str:
+        """
+        If a pre-computed .safetensors cache file exists for an audio path,
+        return the cache path instead (loads ~10x faster than re-encoding WAV).
+        """
+        if self.voices_cache_dir and not audio_path.endswith('.safetensors'):
+            stem = Path(audio_path).stem
+            cache_file = Path(self.voices_cache_dir) / f'{stem}.safetensors'
+            if cache_file.exists():
+                logger.debug(f'Cache hit: {cache_file.name} for {Path(audio_path).name}')
+                return str(cache_file)
+        return audio_path
 
     def validate_voice(self, voice_id_or_path: str) -> tuple[bool, str]:
         """
@@ -279,6 +317,62 @@ class TTSService:
 
         logger.info(f'Starting streaming generation for {len(text)} chars')
         yield from self.model.generate_audio_stream(voice_state, text)
+
+    def precompute_voices(self):
+        """
+        Pre-compute .safetensors state cache for all WAV/audio voices.
+        Yields progress dicts (NDJSON-friendly). Skips already-cached voices.
+        Each .safetensors loads ~10x faster than re-encoding the source WAV.
+        """
+        if not self.voices_dir or not self.voices_cache_dir:
+            yield {'status': 'error', 'error': 'voices_dir or voices_cache_dir not configured'}
+            return
+
+        from pocket_tts.models.tts_model import export_model_state
+
+        audio_exts = {'.wav', '.mp3', '.flac'}
+        voice_files = sorted(
+            [f for f in Path(self.voices_dir).iterdir() if f.suffix.lower() in audio_exts],
+            key=lambda f: f.name.lower(),
+        )
+        total = len(voice_files)
+        done = 0
+        errors = []
+
+        for voice_file in voice_files:
+            done += 1
+            cache_file = Path(self.voices_cache_dir) / f'{voice_file.stem}.safetensors'
+
+            if cache_file.exists():
+                yield {'voice': voice_file.name, 'status': 'cached', 'done': done, 'total': total}
+                continue
+
+            try:
+                t0 = time.time()
+                state = self.model.get_state_for_audio_prompt(str(voice_file))
+                self.voice_cache[str(voice_file)] = state
+                export_model_state(state, cache_file)
+                elapsed = round(time.time() - t0, 2)
+                logger.info(f'Precomputed {voice_file.name} in {elapsed}s')
+                yield {
+                    'voice': voice_file.name,
+                    'status': 'computed',
+                    'done': done,
+                    'total': total,
+                    'elapsed': elapsed,
+                }
+            except Exception as e:
+                errors.append(voice_file.name)
+                logger.error(f'Failed to precompute {voice_file.name}: {e}')
+                yield {
+                    'voice': voice_file.name,
+                    'status': 'error',
+                    'error': str(e)[:120],
+                    'done': done,
+                    'total': total,
+                }
+
+        yield {'voice': None, 'status': 'complete', 'done': done, 'total': total, 'errors': errors}
 
     def list_voices(self) -> list[dict]:
         """
